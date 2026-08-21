@@ -1,0 +1,24 @@
+- Scenario: <TODO>
+
+- Observed: <TODO>
+
+- Benign hypothesis: <TODO>
+
+- Malicious hypothesis: <TODO>
+
+- Investigate 
+-- Who / Actor :  <TODO>
+         (e.g., )
+-- When / Time :  <TODO>
+          (e.g.,  )
+-- Where / Origin :  <TODO> 
+          (e.g., )
+-- How / Mechanism :  <TODO> 
+          (e..g., )
+-- What / Action:   <TODO> 
+          (e.g., )
+-- Why / Context:   <TODO>
+          (e.g., )
+-- Verdict:   <TODO>
+          (e.g., )
+

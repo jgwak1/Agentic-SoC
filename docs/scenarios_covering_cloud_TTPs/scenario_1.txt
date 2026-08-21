@@ -1,0 +1,25 @@
+- Scenario: Credential Persistence
+
+- Observed: IAM access key was newly generated
+
+- Benign hypothesis: An authorized admin created an access key for a legitimate IAM principal for an approved programmtic workload or onboarding purpose.
+
+- Malicious hypothesis: An adversary with compromised privileged credentials created an additional access key for an existing or newly created IAM principal to establish persistent access.
+
+- Investigate 
+-- Who / Actor : Who created the access key? 
+         (e.g., "CreateAccessKey" event's caller identity, source IP, user agent, session/MFA context)
+-- When / Time : When was the key created and first used ?
+          (e.g., "CreateAccessKey" event's timestamp, first-API call's timestamp )
+-- Where / Origin : Where did the access key creation originate?
+          (e.g., source IP, AWS region, typical vs. unusual network or location)
+-- How / Mechanism : How was the new access key used to obtain or expand access ?
+          (e..g., role-assumption, privilege escalation)
+-- What / Action: What did the new access key do afterward?
+          (e.g., first API calls, resource enumeration, permission changes, sensitive-resource access)
+-- Why / Context: Is there evidence that supports the benign hypohtesis (i.e., an approved or expected reason for the access key creation)?
+          (e.g., onboarding ticket, known automaton, approved admin activity)
+-- Verdict: What does the evidence support ?
+          (e.g., Benign / Malicious / Insufficient evidence )
+
+
