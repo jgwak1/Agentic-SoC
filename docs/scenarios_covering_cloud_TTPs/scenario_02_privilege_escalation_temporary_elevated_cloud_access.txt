@@ -1,9 +1,10 @@
-- Scenario: <TODO>
+- Scenario: Temporary Privilege Escalation / Role Abuse
+- Primary tactic: Privilege Escalation
+- Relevant ATT&CK technique: "T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access"
+- Secondary tactic: Persistence (if temporary elevated access is used to establish longer-lived access)
 
 - Observed: <TODO>
-
 - Benign hypothesis: <TODO>
-
 - Malicious hypothesis: <TODO>
 
 - Investigate 

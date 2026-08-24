@@ -1,9 +1,10 @@
-- Scenario: <TODO>
+- Scenario: Unauthorized Direct Cloud VM Access
+- Primary tactic: Lateral Movement
+- Relevant ATT&CK technique: "T1021.008 - Remote Services: Direct Cloud VM Connections"
+- Secondary tactic: Execution (if the VM access is followed by command exeuction)
 
 - Observed: <TODO>
-
 - Benign hypothesis: <TODO>
-
 - Malicious hypothesis: <TODO>
 
 - Investigate 
@@ -21,4 +22,6 @@
           (e.g., )
 -- Verdict:   <TODO>
           (e.g., )
+
+
 

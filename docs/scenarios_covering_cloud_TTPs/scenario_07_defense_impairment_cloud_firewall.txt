@@ -1,0 +1,25 @@
+- Scenario: Cloud Firewall Manipulation
+- Primary tactic: Defense Impairment
+- Relevant ATT&CK technique: "T1686.001 - Disable or Modify System Firewall: Cloud Firewall"
+- Secondary tactic: Lateral Movement (e.g., modified firewall / security group rules enable previously blocked access to a cloud VM or facilitate pivoting)
+- Secondary ATT&CK technique: "T1021.008 - Remote Services: Direct Cloud VM Connections" (if direct VM access follows)
+
+- Observed: <TODO>
+- Benign hypothesis: <TODO>
+- Malicious hypothesis: <TODO>
+
+- Investigate 
+-- Who / Actor :  <TODO>
+         (e.g., )
+-- When / Time :  <TODO>
+          (e.g.,  )
+-- Where / Origin :  <TODO> 
+          (e.g., )
+-- How / Mechanism :  <TODO> 
+          (e..g., )
+-- What / Action:   <TODO> 
+          (e.g., )
+-- Why / Context:   <TODO>
+          (e.g., )
+-- Verdict:   <TODO>
+          (e.g., )

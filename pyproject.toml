@@ -1,0 +1,6 @@
+[project]
+name = "agentic-soc"
+version = "0.1.0"
+description = "Agentic SOC research and engineering project"
+requires-python = ">=3.12"
+dependencies = []

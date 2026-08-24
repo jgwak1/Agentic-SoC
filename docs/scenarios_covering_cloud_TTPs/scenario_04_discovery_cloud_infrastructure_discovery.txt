@@ -1,9 +1,12 @@
-- Scenario: <TODO>
+- Scenario: Suspicious Cloud Resource Discovery
+- Primary tactic: Discovery
+- Relevant ATT&CK techniques: 
+                  "T1580 - Cloud Infrastructure Discovery"
+                  "T1619 - Cloud Storage Object Discovery"       
+- Secondary tactic: Collection (if discovered resources are subseuqently accessed for data)
 
 - Observed: <TODO>
-
 - Benign hypothesis: <TODO>
-
 - Malicious hypothesis: <TODO>
 
 - Investigate 

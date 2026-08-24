@@ -1,9 +1,11 @@
-- Scenario: <TODO>
+- Scenario: Unauthorized Serverless Execution
+- Primary tactic: Execution
+- Relevant ATT&CK technique: "T1648 - Serverless Execution"
+- Secondary tactic: Persistence ( if the serverless function is configured for repeated / event-triggered execution (e.g., T1546: Event Trigerred Execution) )
+
 
 - Observed: <TODO>
-
 - Benign hypothesis: <TODO>
-
 - Malicious hypothesis: <TODO>
 
 - Investigate 

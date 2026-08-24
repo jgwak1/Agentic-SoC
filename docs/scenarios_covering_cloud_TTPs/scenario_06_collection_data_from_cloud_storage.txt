@@ -1,9 +1,10 @@
-- Scenario: <TODO>
+- Scenario: Cloud Data Collection and Exfiltration
+- Primary tactic: Collection
+- Relevant ATT&CK technique: "T1530 - Data from Cloud Storage"	
+- Secondary tactic: Exfiltration (e.g., "T1537 - Transfer Data to Cloud Account")
 
 - Observed: <TODO>
-
 - Benign hypothesis: <TODO>
-
 - Malicious hypothesis: <TODO>
 
 - Investigate 
@@ -21,4 +22,5 @@
           (e.g., )
 -- Verdict:   <TODO>
           (e.g., )
+
 

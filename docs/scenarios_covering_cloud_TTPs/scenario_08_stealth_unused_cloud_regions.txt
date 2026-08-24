@@ -1,0 +1,25 @@
+- Scenario: Resource Creation in an Unused Cloud Region
+- Primary tactic: Stealth
+- Relevant ATT&CK technique: "T1535 - Unused/Unsupported Cloud Regions"
+- Secondary tactic: Impact (e.g., resources created in a region (e.g., eu-central-1) typically unused by the organization, 
+                                  and the adversary hijacks those resources for malicious purposes such as cryptomining.)
+
+- Observed: <TODO>
+- Benign hypothesis: <TODO>
+- Malicious hypothesis: <TODO>
+
+- Investigate 
+-- Who / Actor :  <TODO>
+         (e.g., )
+-- When / Time :  <TODO>
+          (e.g.,  )
+-- Where / Origin :  <TODO> 
+          (e.g., )
+-- How / Mechanism :  <TODO> 
+          (e..g., )
+-- What / Action:   <TODO> 
+          (e.g., )
+-- Why / Context:   <TODO>
+          (e.g., )
+-- Verdict:   <TODO>
+          (e.g., )
