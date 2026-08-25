@@ -3,23 +3,23 @@
 - Relevant ATT&CK technique: "T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access"
 - Secondary tactic: Persistence (if temporary elevated access is used to establish longer-lived access)
 
-- Observed: <TODO>
-- Benign hypothesis: <TODO>
-- Malicious hypothesis: <TODO>
+Observed: A cloud account assumed a role with higher privileges.
+Benign hypothesis: An authorized user temporarily assumed an elevated role for a legitimate administrative task, such as an approved deployment or maintenance activity.
+Malicious hypothesis: An adversary controlling a compromised cloud account assumed a higher-privileged role to perform unauthorized actions, potentially including establishing longer-lived persistence.
 
-- Investigate 
--- Who / Actor :  <TODO>
-         (e.g., )
--- When / Time :  <TODO>
-          (e.g.,  )
--- Where / Origin :  <TODO> 
-          (e.g., )
--- How / Mechanism :  <TODO> 
-          (e..g., )
--- What / Action:   <TODO> 
-          (e.g., )
--- Why / Context:   <TODO>
-          (e.g., )
--- Verdict:   <TODO>
-          (e.g., )
+Investigate
+-- Who / Actor: Who initiated the role assumption?
+               (e.g., caller identity, originating principal, session identity, MFA/session context)
+-- When / Time: When did the role assumption occur, and was the timing expected?
+               (e.g., during an approved deployment window vs. unusual/off-hours activity)
+-- Where / Origin: Where did the role-assumption request originate?
+               (e.g., source IP, network/location, expected corporate/VPN origin vs. unusual source)
+-- How / Mechanism: How was the account able to obtain the elevated role?
+               (e.g., expected AssumeRole permission vs. overly permissive IAM policy or unexpected privilege path)
+-- What / Action: What did the account do after obtaining elevated privileges?
+               (e.g., modify IAM permissions, create credentials, access sensitive resources, disable controls)
+-- Why / Context: Does the surrounding context support a legitimate reason for the elevation?
+               (e.g., approved deployment/change ticket, known administrator activity, expected workflow, or lack of any legitimate explanation)
+-- Verdict: Benign / Malicious / Insufficient evidence
+               (e.g., benign if actor, timing, mechanism, and follow-on activity match an approved workflow; malicious if the privilege path or subsequent actions are unauthorized)
 
