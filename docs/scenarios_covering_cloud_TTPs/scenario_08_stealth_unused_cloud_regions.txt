@@ -4,22 +4,29 @@
 - Secondary tactic: Impact (e.g., resources created in a region (e.g., eu-central-1) typically unused by the organization, 
                                   and the adversary hijacks those resources for malicious purposes such as cryptomining.)
 
-- Observed: <TODO>
-- Benign hypothesis: <TODO>
-- Malicious hypothesis: <TODO>
+- Observed: A cloud identity creates a new cloud resource, such as an EC2 instance, in an AWS region that is normally unused or weakly monitored by the organization.
+- Benign hypothesis: An authorized team intentionally deployed resources in a previously unused region for a legitimate reason such as disaster-recovery testing, temporary capacity needs, geographic expansion, latency requirements, compliance requirements, or approved testing.
+- Malicious hypothesis: An adversary using a compromised or unauthorized cloud identity creates resources in an unused or weakly monitored region to reduce defender visibility and use the resources for malicious activity such as cryptomining, scanning, proxying, or other resource hijacking.
 
-- Investigate 
--- Who / Actor :  <TODO>
-         (e.g., )
--- When / Time :  <TODO>
-          (e.g.,  )
--- Where / Origin :  <TODO> 
-          (e.g., )
--- How / Mechanism :  <TODO> 
-          (e..g., )
--- What / Action:   <TODO> 
-          (e.g., )
--- Why / Context:   <TODO>
-          (e.g., )
--- Verdict:   <TODO>
-          (e.g., )
+
+Investigate
+-- Who / Actor: Which cloud identity or session created the resource, and is that identity normally authorized to create infrastructure in that region?
+                (e.g., IAM user, assumed role, administrator session, service account, normal permissions and responsibilities)
+
+-- When / Time: When was the resource created, and does the timing make sense relative to the actor's normal behavior or the organization's activity?
+                (e.g., expected deployment window vs. unusual off-hours creation; timing consistent with an approved regional test or expansion plan)
+
+-- Where / Origin: Where did the resource-creation request originate, and where was the resource created?
+                   (e.g., source IP/network, corporate/VPN origin, AWS region such as eu-central-1, whether the organization normally operates or monitors that region)
+
+-- How / Mechanism: How was the cloud identity able to create the resource in that region, and through which permission path was the creation performed?
+                    (e.g., legitimate EC2 creation permissions, compromised privileged session, unexpected AssumeRole, overly broad IAM permissions, or modified policy allowing resource creation in normally restricted regions)
+
+-- What / Action: What resource was created, how was it configured, and what activity followed its creation?
+                  (e.g., EC2 instance type and compute capacity, network configuration, processes/workloads executed, high CPU usage consistent with cryptomining, unusual outbound connections or data egress)
+
+-- Why / Context: Does the surrounding organizational context provide a legitimate explanation for using the previously unused region?
+                  (e.g., approved disaster-recovery test, migration or expansion plan, temporary capacity requirement, compliance requirement, or no known business reason for deployment in that region)
+
+-- Verdict: Benign / Malicious / Insufficient evidence
+            (e.g., benign if actor, timing, region, permissions, resource configuration, and follow-on activity match an approved plan; malicious if unauthorized regional deployment and suspicious resource usage are supported by the evidence)

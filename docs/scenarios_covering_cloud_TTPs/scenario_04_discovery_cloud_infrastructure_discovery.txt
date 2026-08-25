@@ -5,29 +5,28 @@
                   "T1619 - Cloud Storage Object Discovery"       
 - Secondary tactic: Collection (if discovered resources are subseuqently accessed for data)
 
-- Observed: A serverless function was created, modified, or invoked, potentially through a repeated or event-triggered execution mechanism.
-- Benign hypothesis: An authorized user or service configured and invoked the serverless function for a legitimate automated workload or operational task.
-- Malicious hypothesis: An adversary used or modified a serverless function to execute unauthorized actions, potentially configuring repeated or event-triggered execution to maintain recurring access or activity.
+- Observed: An AWS identity performs unusual resource-enumeration activity across cloud infrastructure or storage resources.
+- Benign hypothesis: An authorized user or service is enumerating cloud resources for a legitimate purpose such as inventory management, troubleshooting, deployment, auditing, or checking available resources.
+- Malicious hypothesis: An adversary using a compromised or unauthorized AWS identity is enumerating cloud infrastructure or storage resources to identify targets for subsequent access, collection, or lateral movement.
 
 Investigate
--- Who / Actor: Who created, modified, configured, or invoked the serverless function?
-            (e.g., IAM principal, assumed role, service account, calling service, session identity)         
+-- Who / Actor: Which AWS identity or session performed the discovery activity, and what is its normal role?
+               (e.g., IAM user, assumed role, service account, session identity, normal permissions and responsibilities)
 
--- When / Time: When was the function created, modified, and invoked, and does the execution pattern match expected behavior?
-               (e.g., expected scheduled execution vs. newly introduced or unusual recurring executions)
+-- When / Time: When did the discovery activity occur, and does its temporal pattern match expected behavior?
+               (e.g., normal inventory schedule vs. unusual timing, sudden burst of enumeration, or previously unseen low-and-slow discovery activity)
 
--- Where / Origin: Where did the function invocation or configuration activity originate?
-            (e.g., source IP, AWS region, API Gateway, scheduler, event source, internal service)
+-- Where / Origin: Where did the discovery requests originate, and is the origin expected for this actor?
+                  (e.g., source IP, AWS region, corporate/VPN network, unusual geographic or network origin)
 
--- How / Mechanism: How was the serverless function invoked or configured to execute?
-            (e.g., direct API invocation, API Gateway, scheduled trigger, event trigger, or an unexpected IAM permission/exposure path)
+-- How / Mechanism: How was the identity able to perform the discovery, and which APIs or privilege path were used?
+                     (e.g., DescribeInstances, ListBuckets, ListObjectsV2, or low-privilege user → unexpected AssumeRole → privileged role → broad resource discovery)
 
--- What / Action: What did the serverless function actually do after execution?
-               (e.g., access or allocate cloud resources, modify permissions, invoke other services, create resources, execute repeated actions)
+-- What / Action: What resources were discovered, how broad was the enumeration, and what actions followed?
+                  (e.g., EC2 instances, VPCs, databases, S3 buckets/objects; enumeration followed by GetObject, resource access, or other sensitive actions)
 
--- Why / Context: Does the surrounding context provide a legitimate explanation for the function and its execution pattern?
-               (e.g., approved automation, known workload, expected deployment/change, documented scheduled task, or no legitimate explanation for the function/trigger)
+-- Why / Context: Does the surrounding context provide a legitimate explanation for the discovery activity?
+                  (e.g., known inventory job, approved troubleshooting or deployment activity, expected administrator behavior, or no legitimate reason for broad enumeration)
 
 -- Verdict: Benign / Malicious / Insufficient evidence
-            (e.g., benign if actor, trigger, function behavior, and context match an approved workflow; malicious if unauthorized function behavior or persistence-oriented triggering is supported by the evidence)
-
+            (e.g., benign if actor, timing, origin, permissions, and follow-on activity match an expected workflow; malicious if unauthorized discovery and suspicious subsequent access are supported by the evidence)

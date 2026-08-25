@@ -3,25 +3,31 @@
 - Relevant ATT&CK technique: "T1021.008 - Remote Services: Direct Cloud VM Connections"
 - Secondary tactic: Execution (if the VM access is followed by command exeuction)
 
-- Observed: <TODO>
-- Benign hypothesis: <TODO>
-- Malicious hypothesis: <TODO>
+- Observed: A direct remote-access session to a cloud VM is established through a cloud-management or remote-access mechanism.
+- Benign hypothesis: An authorized administrator or service accessed the VM for a legitimate task such as maintenance, troubleshooting, deployment, or resource inspection.
+- Malicious hypothesis: An adversary using a compromised identity or system accessed the cloud VM to move laterally and perform unauthorized actions.
 
-- Investigate 
--- Who / Actor :  <TODO>
-         (e.g., )
--- When / Time :  <TODO>
-          (e.g.,  )
--- Where / Origin :  <TODO> 
-          (e.g., )
--- How / Mechanism :  <TODO> 
-          (e..g., )
--- What / Action:   <TODO> 
-          (e.g., )
--- Why / Context:   <TODO>
-          (e.g., )
--- Verdict:   <TODO>
-          (e.g., )
+Investigate
+-- Who / Actor: Who initiated or established the VM access, and is that actor normally authorized to access the VM?
+                (e.g., IAM user/role for SSM or EC2 Instance Connect, or source host/user/key for direct SSH/RDP)
+
+-- When / Time: When did the connection occur, and does it match the normal access pattern for that actor and VM?
+                (e.g., expected maintenance window vs. unusual time, frequency, or previously unseen access)
+
+-- Where / Origin: Where did the connection originate, and is that source consistent with normal behavior?
+                   (e.g., expected corporate/VPN network or internal host vs. unusual external IP, region, or compromised system)
+
+-- How / Mechanism: How was the VM accessed, and was that access path expected and properly authorized?
+                    (e.g., AWS Systems Manager Session Manager, EC2 Instance Connect, direct SSH on port 22, or RDP on port 3389)
+
+-- What / Action: What actions occurred after access to the VM was established?
+                  (e.g., command execution, file access, credential discovery, internal network discovery, privilege changes, or connections to additional systems)
+
+-- Why / Context: Does the surrounding context provide a legitimate explanation for the VM access and subsequent activity?
+                  (e.g., approved maintenance or deployment activity, known administrator behavior, expected access path, or no legitimate reason for the connection)
+
+-- Verdict: Benign / Malicious / Insufficient evidence
+            (e.g., benign if actor, timing, origin, mechanism, and follow-on actions match expected administrative activity; malicious if unauthorized access or suspicious lateral activity is supported by the evidence)
 
 
 

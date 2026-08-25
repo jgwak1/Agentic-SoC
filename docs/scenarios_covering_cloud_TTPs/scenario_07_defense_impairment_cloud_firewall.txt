@@ -1,25 +1,33 @@
 - Scenario: Cloud Firewall Manipulation
 - Primary tactic: Defense Impairment
 - Relevant ATT&CK technique: "T1686.001 - Disable or Modify System Firewall: Cloud Firewall"
-- Secondary tactic: Lateral Movement (e.g., modified firewall / security group rules enable previously blocked access to a cloud VM or facilitate pivoting)
+- Secondary tactic: Lateral Movement (e.g., modified firewall / security group rules enable previously blocked access to a cloud VM or facilitate pivoting )
 - Secondary ATT&CK technique: "T1021.008 - Remote Services: Direct Cloud VM Connections" (if direct VM access follows)
 
-- Observed: <TODO>
-- Benign hypothesis: <TODO>
-- Malicious hypothesis: <TODO>
+- Observed: A cloud firewall or security-group configuration was disabled or modified in a way that broadened previously restricted network access.
+- Benign hypothesis: An authorized administrator modified the firewall/security-group configuration for a legitimate operational reason such as deployment, maintenance, troubleshooting, migration, or enabling an approved network path.
+- Malicious hypothesis: An adversary using a compromised or unauthorized cloud identity weakened or disabled firewall/security-group controls to enable unauthorized access to protected cloud resources or facilitate lateral movement.
 
-- Investigate 
--- Who / Actor :  <TODO>
-         (e.g., )
--- When / Time :  <TODO>
-          (e.g.,  )
--- Where / Origin :  <TODO> 
-          (e.g., )
--- How / Mechanism :  <TODO> 
-          (e..g., )
--- What / Action:   <TODO> 
-          (e.g., )
--- Why / Context:   <TODO>
-          (e.g., )
--- Verdict:   <TODO>
-          (e.g., )
+Investigate
+-- Who / Actor: Which cloud identity or session performed the firewall/security-group modification, and is that identity normally authorized to make such changes?
+                (e.g., IAM user, assumed role, administrator session, MFA/session context, source identity metadata)
+
+-- When / Time: When was the firewall change made, how long did it remain active, and does the timing match normal operational behavior?
+                (e.g., approved maintenance window, temporary rule reverted after a known task, unexpected off-hours modification)
+
+-- Where / Origin: Where did the modification request originate, and which environment or protected resources were affected?
+                   (e.g., corporate/VPN source vs. unusual IP; production VPC vs. development VPC; security group protecting EC2, database, or internal service)
+
+-- How / Mechanism: How was the identity able to modify or disable the firewall, and through which privilege path was the change made?
+                    (e.g., legitimate NetworkAdminRole directly modifying the security group; stolen privileged AWS session/access key; 
+                           compromised DeveloperRole unexpectedly using sts:AssumeRole to obtain NetworkAdminRole because of overly permissive IAM/trust policies; 
+                           or an overly broad DeveloperRole already having permissions such as ec2:AuthorizeSecurityGroupIngress)
+
+-- What / Action: What exactly was changed in the firewall/security-group configuration, and what activity followed the change?
+                  (e.g., source CIDR widened from 10.0.0.0/24 to 0.0.0.0/0, ports 22/3389/5432 opened, ingress/egress rule added or removed, security group replaced, followed by new VM/database connections)
+
+-- Why / Context: Does the surrounding context provide a legitimate explanation for the firewall modification?
+                  (e.g., approved deployment/change ticket, maintenance activity, new service requirement, known administrator action, or no legitimate reason for the expanded access)
+
+-- Verdict: Benign / Malicious / Insufficient evidence
+            (e.g., benign if actor, timing, privilege path, rule change, and follow-on access match an approved workflow; malicious if unauthorized modification and suspicious subsequent access are supported by the evidence)

@@ -4,23 +4,29 @@
 - Secondary tactic: Persistence ( if the serverless function is configured for repeated / event-triggered execution (e.g., T1546: Event Trigerred Execution) )
 
 
-- Observed: <TODO>
-- Benign hypothesis: <TODO>
-- Malicious hypothesis: <TODO>
+- Observed: A serverless function was created, modified, or invoked, potentially through a repeated or event-triggered execution mechanism.
+- Benign hypothesis: An authorized user or service configured and invoked the serverless function for a legitimate automated workload or operational task.
+- Malicious hypothesis: An adversary used or modified a serverless function to execute unauthorized actions, potentially configuring repeated or event-triggered execution to maintain recurring access or activity.
 
-- Investigate 
--- Who / Actor :  <TODO>
-         (e.g., )
--- When / Time :  <TODO>
-          (e.g.,  )
--- Where / Origin :  <TODO> 
-          (e.g., )
--- How / Mechanism :  <TODO> 
-          (e..g., )
--- What / Action:   <TODO> 
-          (e.g., )
--- Why / Context:   <TODO>
-          (e.g., )
--- Verdict:   <TODO>
-          (e.g., )
 
+Investigate
+-- Who / Actor: Who created, modified, configured, or invoked the serverless function?
+                (e.g., IAM principal, assumed role, service account, calling service, session identity)
+
+-- When / Time: When was the function created, modified, and invoked, and does the execution pattern match expected behavior?
+               (e.g., expected scheduled execution vs. newly introduced or unusual recurring executions)
+
+-- Where / Origin: Where did the function invocation or configuration activity originate?
+                  (e.g., source IP, AWS region, API Gateway, scheduler, event source, internal service)
+
+-- How / Mechanism: How was the serverless function invoked or configured to execute?
+                     (e.g., direct API invocation, API Gateway, scheduled trigger, event trigger, or an unexpected IAM permission/exposure path)
+
+-- What / Action: What did the serverless function actually do after execution?
+                  (e.g., access or allocate cloud resources, modify permissions, invoke other services, create resources, execute repeated actions)
+
+-- Why / Context: Does the surrounding context provide a legitimate explanation for the function and its execution pattern?
+                  (e.g., approved automation, known workload, expected deployment/change, documented scheduled task, or no legitimate explanation for the function/trigger)
+
+-- Verdict: Benign / Malicious / Insufficient evidence
+            (e.g., benign if actor, trigger, function behavior, and context match an approved workflow; malicious if unauthorized function behavior or persistence-oriented triggering is supported by the evidence)

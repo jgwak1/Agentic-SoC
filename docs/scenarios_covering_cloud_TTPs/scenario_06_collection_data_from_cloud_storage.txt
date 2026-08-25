@@ -3,24 +3,30 @@
 - Relevant ATT&CK technique: "T1530 - Data from Cloud Storage"	
 - Secondary tactic: Exfiltration (e.g., "T1537 - Transfer Data to Cloud Account")
 
-- Observed: <TODO>
-- Benign hypothesis: <TODO>
-- Malicious hypothesis: <TODO>
+- Observed: An AWS identity accesses and collects data from cloud storage, potentially followed by transfer of that data to another cloud account or external destination.
+- Benign hypothesis: An authorized user or service accesses and transfers cloud-stored data for a legitimate purpose such as backup, migration, replication, analytics, or approved cross-account sharing.
+- Malicious hypothesis: An adversary using a compromised or unauthorized identity collects sensitive data from cloud storage and transfers it to an attacker-controlled or otherwise unauthorized destination.
 
-- Investigate 
--- Who / Actor :  <TODO>
-         (e.g., )
--- When / Time :  <TODO>
-          (e.g.,  )
--- Where / Origin :  <TODO> 
-          (e.g., )
--- How / Mechanism :  <TODO> 
-          (e..g., )
--- What / Action:   <TODO> 
-          (e.g., )
--- Why / Context:   <TODO>
-          (e.g., )
--- Verdict:   <TODO>
-          (e.g., )
+Investigate
+-- Who / Actor: Which AWS identity or session initiated the data access and transfer, and is that identity normally authorized to access the data?
+                (e.g., IAM user, assumed role, service account, session identity, normal responsibilities and permissions)
+
+-- When / Time: When did the collection and transfer occur, and does the timing, frequency, or volume deviate from the normal baseline?
+                (e.g., unusually large number of objects accessed in a short period, off-hours transfer, unexpected recurring activity)
+
+-- Where / Origin: Where did the access activity originate, and where was the data moved from and to?
+                   (e.g., source IP/network, source S3 bucket and AWS region, destination AWS account/region, unusual external or cross-account destination)
+
+-- How / Mechanism: How did the identity obtain access to the data, and how was the data accessed or transferred?
+                    (e.g., normal S3 permissions vs. unexpected AssumeRole or modified IAM policy; ListObjectsV2, GetObject, CopyObject, AWS CLI/SDK, cross-account copy, presigned URL)
+
+-- What / Action: What data was collected, how much was accessed, whether it was staged, and what happened afterward?
+                  (e.g., sensitive S3 objects identified and downloaded, data staged into a temporary archive, copied to another account, or streamed directly to an external destination)
+
+-- Why / Context: Does the surrounding context provide a legitimate explanation for the collection and transfer activity?
+                  (e.g., approved backup or migration, known analytics workflow, expected cross-account replication, or no legitimate business reason for the data movement)
+
+-- Verdict: Benign / Malicious / Insufficient evidence
+            (e.g., benign if actor, data scope, timing, destination, permissions, and transfer mechanism match an approved workflow; malicious if unauthorized collection and transfer to an attacker-controlled or unknown destination are supported by the evidence)
 
 
