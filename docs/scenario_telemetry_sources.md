@@ -151,28 +151,63 @@ For **Covers**, use one or more of:
 ## Scenario 05 - Unauthorized Direct Cloud VM Access
 
 ### Telemetry Source 1
-- Telemetry source:
+- Telemetry source: 
+      AWS CloudTrail Management events
 - Covers:
+      Actor / Time / Origin, Mechanism, Action
 - Why collect it:
+      Records AWS-native VM access activity such as SSM Session Manager or EC2 Instance Connect API calls, including which AWS identity initiated the access, when it occurred, where it originated, and which EC2 instance was targeted.
 - Required setup:
+      Enable CloudTrail management event logging.
 - Notes / gaps:
+      - CloudTrail is useful for AWS-native access paths, but ordinary direct SSH/RDP connections are not represented as IAM API activity in the same way.
+      - CloudTrail does not show arbitrary commands or other activity performed inside the VM.
 
 ### Telemetry Source 2
 - Telemetry source:
+      AWS VPC Flow Logs
 - Covers:
+      Origin, Mechanism, Action
 - Why collect it:
+      - Records network-flow metadata within the AWS virtual private network (VPC), helping determine whether a VM received direct network connectiosn such as SSH or RDP.
+      - It can provide source/destination IPs, ports, protocol, timing, traffic volume, and whether traffic was accepted or rejected.
 - Required setup:
+      Enable VPC Flow Logs for the in-scope VPC, subnet, or network interfaces.
 - Notes / gaps:
+      - VPC Flow Logs provide network-flow metadata rather than authentication details, commands, or application content.
+      - A connection such as "external IP --> EC2:22" does not by itself show whether SSH authentication succeeded or what happened after login.
+      - Flow records should therefore be correlated with host authentication / endpoint telemetry when deeper investigation is required.
 
 ### Telemetry Source 3
-- Telemetry source:
+- Telemetry source: 
+      AWS IAM + network-access configuration, supplemented by AWS Config history
 - Covers:
+      Mechanism / Permission
 - Why collect it:
+      - Determines why the VM access path was possible.
+      - IAM configuration helps explain AWS-native access permissions such as SSM or EC2 Instance Connect, while network configuration such as Security Groups helps explain whether direct SSH/RDP traffic was permitted.
+      - AWS Config history can help reconstruct the relevant access-control configuration that existed around incident time.
 - Required setup:
+      - Give the investigator read-only access to relevant IAM and network configuration.
+      - Enables AWS Config recording for relevant resources when historical configuration reconstruction is needed.
 - Notes / gaps:
+      - The required configuration evidence depends on the access path: IAM permissions matter more for AWS-native access, while network controls matter more for direct SSH/RDP.
+      - Historical state is only available if the relevant configuration was already being recorded.
 
-VPC Flow Logs?
-
+### Telemetry Source 4
+- Telemetry source:
+      EC2 host login / authentication logs + Endpoint Telemetry
+- Covers:
+      Actor, Action / Follow-on
+- Why collect it:
+      - Enriches network and cloud-access evidence with activity observed inside the EC2 VM. 
+      - It can help determine whether authentication succeeded, which host user was involved, and what processes, commands, file activity, credential access, or subsequent network activity occurred after access.
+- Required setup:
+      Collect OS login / authentication logs and endpoint telemetry from the in-scope EC2 instances, using the selected host logging or endpoint-security mechanism.
+- Notes / gaps:
+      - The exact visibility depends on which host telemtry is enabled.
+      - CloudTrail and VPC Flow Logs alone cannot reconstruct arbitrary activity occurring inside the VM.
+      - Host / endpoint telemetry can be correlated with VPC Flow Logs to turn connection metadata into richer investigation evidence.
 
 ---
 
@@ -180,27 +215,50 @@ VPC Flow Logs?
 
 ### Telemetry Source 1
 - Telemetry source:
+      AWS CloudTrail management events
 - Covers:
+      Actor / Time / Origin, Mechanism, 
 - Why collect it:
+      Records AWS management / API activity related to the identity performing the collection or transer, including the originating identity/session, time, source, role-assumption activity, and related control-plane actions.
 - Required setup:
+      Enable CloudTrail management event logging.
 - Notes / gaps:
+      - CloudTrail management events do not provide complete visibility into S3 object-level reads/writes.
+      - Organization-specific context such as an approved backup, migration, or analytics workflow is not available from CloudTrail alone.
 
 ### Telemetry Source 2
 - Telemetry source:
+      CloudTrail S3 data events
 - Covers:
+      Actor / Time / Origin, Action / Follow-on
 - Why collect it:
+      - Records S3 object-level data-plane activity such as reading, writing, or copying objects.
+      - This allows the investigator to determine which identity accessed which data and whether object-level actions may represent collection or exfiltration.
+      - For example, a "GetObject" request from an attacker-controlled client using compromised credentials can directly retrieve victim data to the attacker's system, while a "CopyObject" operation may represent exfiltration if the destination is an unauthorized or attacker-controlled bucket/account.  
 - Required setup:
+      Enable S3 data-event logging across all in-scope S3 buckets.
 - Notes / gaps:
+      - S3 object-level data-plane operations require CloudTrail data-event logging and are not fully captured by management-event logging alone.
+      - A "GetObject" or "CopyObject" event does not by itself prove malicious exfiltration, the identity, source, destination, volume, timing, and expected business activity must also be considered.
+      - The current collection policy enables coverage across all in-scope S3 buckets to preserve complete investigation visibility, while production deployments may scope data-event collection to control cost and volume.
+      - The current scenario primarily assumes S3 API / cloud-native collection and transfer. A network-heavy path such as "S3 --> EC2 staging --> external destination" would require additional network and host telemetry such as VPC Flow Logs and EC2 host / endpoint telemetry.
 
 ### Telemetry Source 3
-- Telemetry source:
+- Telemetry source: 
+      AWS IAM / S3 access configuration + AWS Config configuration history
 - Covers:
+      Mechanism / Permission
 - Why collect it:
+      - Determines why the identity was allowed to access or transer the S3 data, including IAM permissions and relevant S3 access configuration.
+      - AWS Config history can help reconstruct the access configuration that existed around the time of the suspicious activity. 
 - Required setup:
+      - Give the investigator read-only access to relevant IAM and S3 access configuration.
+      - Enable AWS Config recording for relevant supported resources when historical configuration reconstruction is needed.
 - Notes / gaps:
+      - Currnet configuration may not represent the permissions that existed at incident time.
+      - Historical configuration is only available if the relevant resources were already being recorded.
+      - Configuration evidence can show whether access was technically permitted, but not whether the collection or transfer was organizationally approved.
 
-
-S3 ?  data events via clout trail ? 
 
 
 ---
@@ -209,27 +267,52 @@ S3 ?  data events via clout trail ?
 
 ### Telemetry Source 1
 - Telemetry source:
+      AWS CloudTrail management events
 - Covers:
+      Actor / Time / Origin, Action
 - Why collect it:
+      Records AWS API activity used to create, modify, or remove cloud network-access controls, including which AWS identity initiated the change, when and where it originated, and the specific rule/configuration change requested through the API call (e.g., adding an ingress rule that allows TCP port 22 from '0.0.0.0/0'.)
 - Required setup:
+      Enable CloudTrail management event logging.
 - Notes / gaps:
+      - CloudTrail shows that a network-control change occurred, but does not by itself provide the complete network-control state before and after the change.
+      - It therefore shows what modification was requested, while the actual resulting and historical configuration should be checked through the network-control configuration and AWS Config history.
+      - It also does not show whether the newly permitted network path was actually used afterward.
 
 ### Telemetry Source 2
 - Telemetry source:
+      IAM + firewall / network access-control configuration + AWS Config history (e.g., Security Grous, NACLs, AWS Network Firewall where used)
 - Covers:
+      Mechanism / Permission, Action
 - Why collect it:
+      - IAM configuration explains why the AWS identity had permission to modify the firewall / network controls.
+      - Firewall / network-access configuration shows what traffic was actually permitted or restricted.
+      - AWS Config history helps reconstruct how those network-control settings changed before, during, and after the suspicious activity.
 - Required setup:
+      - Give the investigator read-only access to relevant IAM and network access-control configuration.
+      - Enable AWS Config recording/history for the network resources in scope.
 - Notes / gaps:
+      - CloudTrail shows the requested change action, while this source shows he actual network-control state resulting from those changes.
+      - Security Groups, NACLs, and AWS Network Firewall represent different AWS network-control mechanisms. 
+      - Historical state is only available if the relevant configuration was already being recorded.
+      - Configuration evidence shows what network access was permitted or restricted, but does not by itself show whether hat access path was actually used.
 
 ### Telemetry Source 3
 - Telemetry source:
+      AWS VPC Flow Logs
 - Covers:
+      Origin, Action / Follow-on
 - Why collect it:
+      - Records network-flow metadata after the firewall / network-control change, including soruce/destination IPs, ports, protocol, timing, traffic volume, and whether traffic was accepted or rejected.
+      - This allows the investigator to check whether traffic that matches the newly opened rule actually occured. 
+      - For example, if TCP port 22 was opened to '0.0.0.0/0', the investigator can check whether inbound traffic to that resource on port 22 apeared aterward. 
 - Required setup:
+      Enable VPC Flow Logs for the in-scope VPC, subnet, or network interfaces.
 - Notes / gaps:
+      - VPC Flow Logs can show whether traffic matching the newly permitted firewall rule occurred after the configuration change.
+      - However, VPC Flow Logs do not show whether that traffic resulted in a successful login or waht activity occurred inside the target host.
+      - Host login/authentication logs and host/endpoint telemetry are required to investigate successful access and post-connection activity.
 
-
-VPC Flow Logs?
 
 ---
 
