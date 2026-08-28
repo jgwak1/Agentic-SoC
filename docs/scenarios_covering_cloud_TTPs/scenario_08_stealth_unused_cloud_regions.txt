@@ -8,7 +8,6 @@
 - Benign hypothesis: An authorized team intentionally deployed resources in a previously unused region for a legitimate reason such as disaster-recovery testing, temporary capacity needs, geographic expansion, latency requirements, compliance requirements, or approved testing.
 - Malicious hypothesis: An adversary using a compromised or unauthorized cloud identity creates resources in an unused or weakly monitored region to reduce defender visibility and use the resources for malicious activity such as cryptomining, scanning, proxying, or other resource hijacking.
 
-
 Investigate
 -- Who / Actor: Which cloud identity or session created the resource, and is that identity normally authorized to create infrastructure in that region?
                 (e.g., IAM user, assumed role, administrator session, service account, normal permissions and responsibilities)

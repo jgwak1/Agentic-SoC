@@ -320,28 +320,57 @@ For **Covers**, use one or more of:
 
 ### Telemetry Source 1
 - Telemetry source:
+      AWS CloudTrail multi-region management events
 - Covers:
+      Actor / Time / Origin, Action
 - Why collect it:
+      - Detects AWS resource-creation / configuration API activity across all monitored AWS regions, including regions the organization normally does not use.
+      - It identifies which AWS identity initiated the resource creation, when and where the request originated, which region was targeted, and what resource-creation / configuration action was requested. 
 - Required setup:
+      Enable always-on multi-region CloudTrail management event logging so that activity is collected even from regions normally unused by the organization.
 - Notes / gaps:
+      - Resource inventory / configuration history can also show that a resource appeared in a region and what state it had. 
+      - CloudTrail's main additional value here is identifying the identity/session that initiated the creation and the corresponding API request.
+      - CloudTrail records the creation/configuration event, but does not show the runtime behavior of the newly created workload.
 
 ### Telemetry Source 2
 - Telemetry source:
+      AWS IAM configuration + resouce / configuration inventory + AWS Config history 
 - Covers:
+      Mechanism / Permission, Context
 - Why collect it:
+      - IAM configuration explains why the AWS identity was permitted to create resources in that region.
+      - Resource inventory and configuration show which resources currently exist in each region and how they are configured (e.g., resource type, region, attached IAM role, network configuration, and other relevant settings).
+      - AWS Config history shows when those resources appeared and how their configurations changed over time, helping determine whether resources had historically existed in that region or whether the region was previously unused. 
 - Required setup:
+      - Give the investigator read-only access to relevant IAM and AWS resource configuration APIs.
+      - Enable AWS Config recording/history across all monitored AWS regions, including regions normally unused by the organization, for the resource types that need historical configuration visibility.
+      - Maintain historical region/resource usage so newly used (previously unused) regions can be identified.
 - Notes / gaps:
+      - Resource inventory reflects resources that actually exist after creation, while configuration history can show when those resources/configurations appeared or changed over time. 
+      - Historical configuration evidence is only available where AWS Config supported the relevant resource type/region and recording was already enabled.
+      CloudTrail may still provide the corresponding resource-creation / change API events even when AWS Config history is unavailable. 
+      - Historical resource usage can indicate that a region was previously unused, but organization-specific reasons for intentionally entering a new region (e.g., approved expansion, disaster recorvery, or compliance requirements) may require an external organizational evidence source. 
 
 ### Telemetry Source 3
 - Telemetry source:
+      Workload / runtime telemetry for newly created resources
+      (e.g., CloudWatch Log/Metrics, GuardDuty Runtime Monitoring, or other host/endpoint telemtry where applicable)
 - Covers:
+      Action / Follow-on
 - Why collect it:
+      - Determines what the newly created resource actually did after creation, including both resource-intensive and non-resource intensive behavior.
+      - Depending on the resource type and available monitoring, this may include resource usage, OS/application activity, OS/application activity, process execution, file activity, commands, network connections, or other runtime security events.
 - Required setup:
+      - Preconfigure automatic runtime-monitoring / logging policies across all AWS regions, so that supported newly created workloads begin producing/streaming runtime telemetry at or near creation time, regardless of whether they are created in normally used or unused regions.
+      - Use automatically managed GuardDuty Runtime Monitoring, logging agents, or other suitable collectors where supported.
 - Notes / gaps:
+      - CloudWatch Logs/Metrics, GuardDuty Runtime Monitoring, and host/endpoint telemetry are different mechanisms for collecting different forms of workload/runtime evidence. 
+      -- The important requirement here is that the necessary runtime evidence begins collected automatically rather than only after the suspicious resource is discovered.
+      - Runtime visibility depends on the resource type, region, and monitoring-service support.
+      - If the preferred runtime-monitoring mechanism is unsupported, use another automatically deployable collector where possible. If no suitable mechanism is available, explicitly record a runtime-visibility gap.
+      - Enabling runtime monitoring only after suspicious activity is detected may lose evidence from the resource's initial behavior.
+      - Deeper runtime monitoring can add cost at scale, so production deployments may selectively scope expensive telemetry while preserving broad multi-region resource-creation visibility through CloudTrail.
 
 
-
-CloudWatch Logs / application or host logs → workload/runtime behavior.?
-
-GuardDuty? -- to confirm if it is under-monitored? 
 
