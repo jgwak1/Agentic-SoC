@@ -3,4 +3,13 @@
 __pycache__/
 *.pyc 
 .DS_Store
-*my_internal_doc*
+*my_internal_notes*
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
