@@ -13,3 +13,5 @@ __pycache__/
 *.tfvars.json
 crash.log
 crash.*.log
+
+tmp/
