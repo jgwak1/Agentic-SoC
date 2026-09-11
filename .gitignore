@@ -1,5 +1,6 @@
 .env
 .venv/
+*.egg-info/
 __pycache__/
 *.pyc 
 .DS_Store
@@ -15,3 +16,6 @@ crash.log
 crash.*.log
 
 tmp/
+scripts/scenarios/**/.scenario_state/
+elastic-agent-*.tar.gz
+elastic-agent-*/
