@@ -1,4 +1,4 @@
-"""Prepare the role sessions, then call attacker.py. Run only in your lab."""
+"""Prepare the role sessions, then call attacker.py."""
 
 import json
 import sys

@@ -14,8 +14,8 @@ __pycache__/
 *.tfvars.json
 crash.log
 crash.*.log
-
 tmp/
-scripts/scenarios/**/.scenario_state/
 elastic-agent-*.tar.gz
 elastic-agent-*/
+scripts/scenarios/**/.scenario_state/
+config/elastic.config.json

@@ -6,7 +6,7 @@ import sys
 from botocore.exceptions import ClientError
 
 from attacker import save_record, utc_now   # "save_record" is a shared helper for local scenario-state bookkeeping (here, to record cleanup progress).
-from setup import ACCOUNT_ID, STATE_FILE, TARGET_USER, operator_session
+from run_scenario import ACCOUNT_ID, STATE_FILE, TARGET_USER, operator_session
 
 
 def main() -> None:
