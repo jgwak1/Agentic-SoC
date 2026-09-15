@@ -5,4 +5,9 @@ description = "Agentic SOC research and engineering project"
 requires-python = ">=3.12"
 dependencies = [
     "boto3",
+    "langchain",
+    "langgraph",
+    "langchain-openai",
+    "fastapi",
+    "uvicorn",
 ]
