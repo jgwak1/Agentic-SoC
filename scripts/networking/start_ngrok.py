@@ -5,6 +5,36 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
 
+# -----------------------------------------------------------------------------
+# When this script is needed
+#
+# Elastic Cloud:
+#   Kibana runs on Elastic's remote infrastructure, outside this machine.
+#   When a detection rule triggers a webhook action, that remote Kibana instance
+#   cannot directly reach FastAPI running locally on port 8000.
+#
+#   Elastic Cloud Kibana
+#       -> public ngrok URL
+#       -> local FastAPI (localhost:8000)
+#
+#   Therefore, ngrok is required to expose the local FastAPI webhook endpoint
+#   through a public HTTPS URL.
+#
+# Local Elastic:
+#   Kibana runs locally inside Docker on this same machine. Docker containers can
+#   reach services running on the host through "host.docker.internal".
+#
+#   Local Kibana (Docker)
+#       -> http://host.docker.internal:8000
+#       -> local FastAPI
+#
+#   Therefore, ngrok is NOT required for the local Elastic setup.
+#
+#
+# Note: Kibana executes the webhook action; Elasticsearch stores the alert data.
+# -----------------------------------------------------------------------------
+
+
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_FILE = ROOT / "config" / "elastic.config.json"

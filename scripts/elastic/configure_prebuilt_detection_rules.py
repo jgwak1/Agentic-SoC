@@ -4,9 +4,13 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+import base64
+import json
+
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_FILE = ROOT / "config" / "elastic.config.json"
+LOCAL_ENV_FILE = ROOT / "infra" / "elastic-local" / ".env"
 
 REQUIRED_RULES = [
     "AWS IAM User Created Access Keys For Another User",
@@ -16,6 +20,27 @@ REQUIRED_RULES = [
 def load_config():
     with open(CONFIG_FILE, encoding="utf-8") as f:
         return json.load(f)
+
+
+def load_local_elastic_password():
+    with open(LOCAL_ENV_FILE, encoding="utf-8") as f:
+        for line in f:
+            if line.startswith("ES_LOCAL_PASSWORD="):
+                return line.split("=", 1)[1].strip().strip('"').strip("'")
+
+    raise RuntimeError("ES_LOCAL_PASSWORD not found.")
+
+
+def get_authorization_header():
+    if KIBANA_URL.startswith(("http://localhost", "http://127.0.0.1")):
+        password = load_local_elastic_password()
+        credentials = base64.b64encode(
+            f"elastic:{password}".encode("utf-8")
+        ).decode("ascii")
+
+        return f"Basic {credentials}"
+
+    return f"ApiKey {API_KEY}"
 
 
 config = load_config()
@@ -35,7 +60,8 @@ def request(method, path, body=None):
         data=data,
         method=method,
         headers={
-            "Authorization": f"ApiKey {API_KEY}",
+            # "Authorization": f"ApiKey {API_KEY}",
+            "Authorization": get_authorization_header(),
             "Content-Type": "application/json",
             "kbn-xsrf": "true",
         },
@@ -120,27 +146,42 @@ def ensure_required_rules_installed():
 
 
 def enable_required_rules(installed):
-    rule_ids = [
-        installed[name]["id"]
+    disabled_rules = [
+        installed[name]
         for name in REQUIRED_RULES
         if not installed[name]["enabled"]
     ]
 
-    if not rule_ids:
+    if not disabled_rules:
         print("All required detection rules are already enabled.")
         return
 
-    request(
-        "POST",
-        "/api/detection_engine/rules/_bulk_action",
-        {
-            "action": "enable",
-            "ids": rule_ids,
-        },
+    is_local = KIBANA_URL.startswith(
+        ("http://localhost", "http://127.0.0.1")
     )
 
-    print(f"Enabled {len(rule_ids)} detection rule(s).")
+    if is_local:
+        # Local Elastic 9.5.3: bulk enable returns an incorrect
+        # insufficient-privileges error, so enable rules individually.
+        for rule in disabled_rules:
+            request(
+                "POST",
+                f"/api/alerting/rule/{rule['id']}/_enable",
+            )
+    else:
+        # Keep the existing Elastic Cloud behavior.
+        request(
+            "POST",
+            "/api/detection_engine/rules/_bulk_action",
+            {
+                "action": "enable",
+                "ids": [rule["id"] for rule in disabled_rules],
+            },
+        )
 
+    print(f"Enabled {len(disabled_rules)} detection rule(s).")
+
+    
 
 def main():
     installed = ensure_required_rules_installed()
