@@ -30,3 +30,12 @@ for hit in result["hits"]["hits"]:
         source.get("@timestamp"),
         source.get("kibana.alert.rule.name"),
     )
+
+
+client = ElasticClient()
+
+alert = client.get_alert(
+    "7683839ec6b09a2e277fa4f762c72eb08d97bd19"
+)
+
+print(alert)

@@ -7,7 +7,7 @@ dependencies = [
     "boto3",
     "langchain",
     "langgraph",
-    "langchain-openai",
+    "langchain-ollama",
     "fastapi",
     "uvicorn",
 ]

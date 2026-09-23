@@ -21,3 +21,4 @@ scripts/scenarios/**/.scenario_state/
 config/elastic.config.json
 config/elastic.cloud.config.json
 infra/elastic-local/
+.envrc

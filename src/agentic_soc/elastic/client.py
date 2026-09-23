@@ -65,3 +65,39 @@ class ElasticClient:
             f"{self.kibana_url}/api/detection_engine/signals/search",
             query,
          )
+
+
+    def get_alert(self, alert_id: str) -> dict:
+        body = {
+            "size": 2,
+            "query": {
+                "bool": {
+                    "should": [
+                        {"term": {"_id": alert_id}},
+                        {"term": {"kibana.alert.uuid": alert_id}},
+                        {"term": {"kibana.alert.instance.id": alert_id}},
+                    ],
+                    "minimum_should_match": 1,
+                }
+            },
+        }
+
+        response = self.search_alerts(body)
+
+        hits = response.get("hits", {}).get("hits", [])
+
+        if not hits:
+            raise LookupError(f"Alert not found: {alert_id}")
+
+        if len(hits) > 1:
+            raise RuntimeError(
+                f"Expected one alert for {alert_id}, found {len(hits)}"
+            )
+
+        hit = hits[0]
+
+        return {
+            "_id": hit["_id"],
+            "_index": hit["_index"],
+            **hit["_source"],
+        }
