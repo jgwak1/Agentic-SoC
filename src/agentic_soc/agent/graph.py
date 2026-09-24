@@ -11,6 +11,18 @@ from agentic_soc.tools.elastic_search import search_cloudtrail
 
 
 tools = [search_cloudtrail]
+
+# print(search_cloudtrail.args_schema.model_json_schema())
+# print(
+#    search_cloudtrail.args_schema.model_validate({
+#       "start_time": "2026-09-21T22:00:00.000Z",
+#       "end_time": "2026-09-22T22:00:00.000Z",
+#       "event_action": "CreateAccessKey",
+#       "actor": "ops-automation",
+#       "target": "inventory-service",
+#    }).model_dump()
+# )
+
 llm_with_tools = llm.bind_tools(tools)
 
 
@@ -22,17 +34,27 @@ def load_alert(state: InvestigationState):
 def investigator(state: InvestigationState):
       alert = state["alert"]
 
+      cloudtrail = alert.get("aws", {}).get("cloudtrail", {})
+      flattened = cloudtrail.get("flattened", {})
+
       context = {
          "rule": alert.get("kibana.alert.rule.name"),
          "severity": alert.get("kibana.alert.severity"),
-         "timestamp": alert.get("@timestamp"),
+         "event_time": alert.get("kibana.alert.original_time"),
          "action": alert.get("event.action"),
          "actor": alert.get("user.name"),
          "target": alert.get("user.target.name"),
          "source_ip": alert.get("source.ip"),
          "user_agent": alert.get("user_agent.original"),
-         # "access_key": alert.get("aws.cloudtrail.response_elements"),
-         "access_key": alert["aws"]["cloudtrail"]["flattened"]["response_elements"]["accessKey"]["accessKeyId"],
+
+         # Identity that authenticated the original CloudTrail event
+         "caller_access_key_id": alert.get("aws.cloudtrail.user_identity.access_key_id"),
+         "principal_arn": alert.get("aws.cloudtrail.user_identity.arn"),
+         "identity_type": alert.get("aws.cloudtrail.user_identity.type"),
+
+         # Generic API request/response evidence
+         "request_parameters": flattened.get("request_parameters"),
+         "response_elements": flattened.get("response_elements"),
       }
 
       response = llm_with_tools.invoke([

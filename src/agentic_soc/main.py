@@ -1,6 +1,7 @@
 import sys
-from pprint import pformat
-
+import json
+from pathlib import Path
+from langchain_core.messages import messages_to_dict
 from agentic_soc.agent.graph import graph
 
 
@@ -12,12 +13,21 @@ def main():
    print("Investigation Result:")
    print(result)
 
-   output_file = "/tmp/agentic_soc_last_run.txt"
+   output_dir = Path(__file__).resolve().parents[2] / "outputs"
+   output_dir.mkdir(exist_ok=True)
 
-   with open(output_file, "w") as f:
-      f.write(pformat(result, width=120))
+   output_file = output_dir / "agentic_soc_last_run.json"
+
+   output = {
+      **result,
+      "messages": messages_to_dict(result["messages"]),
+   }
+
+   with open(output_file, "w", encoding="utf-8") as f:
+      json.dump(output, f, indent=2)
 
    print(f"Full run saved to: {output_file}")
+
 
 
 

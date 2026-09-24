@@ -22,3 +22,5 @@ config/elastic.config.json
 config/elastic.cloud.config.json
 infra/elastic-local/
 .envrc
+
+outputs/
