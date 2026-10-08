@@ -3,14 +3,16 @@ from langchain_core.messages import HumanMessage
 from langgraph.prebuilt import ToolNode
 
 from agentic_soc.agent.state import InvestigationState
-from agentic_soc.agent.llm import llm
-from agentic_soc.agent.prompts import INVESTIGATOR_PROMPT, FINAL_VERDICT_PROMPT
+from agentic_soc.agent.llm import base_llm, planner_llm, reviewer_llm
+from agentic_soc.agent.prompts import PLANNER_PROMPT, EXECUTOR_PROMPT, REVIEWER_PROMPT, FINAL_VERDICT_PROMPT
 
 from agentic_soc.elastic.client import ElasticClient
 from agentic_soc.tools.elastic_search import search_cloudtrail
 
+import json
 
 tools = [search_cloudtrail]
+available_tools = "\n".join([f"- {t.name}: {t.description}" for t in tools])
 
 # print(search_cloudtrail.args_schema.model_json_schema())
 # print(
@@ -23,7 +25,7 @@ tools = [search_cloudtrail]
 #    }).model_dump()
 # )
 
-llm_with_tools = llm.bind_tools(tools)
+executor_llm = base_llm.bind_tools(tools)
 
 
 def load_alert(state: InvestigationState):
@@ -31,9 +33,7 @@ def load_alert(state: InvestigationState):
       return {"alert": client.get_alert(state["alert_id"])}
 
 
-def investigator(state: InvestigationState):
-      alert = state["alert"]
-
+def build_alert_context(alert: dict) -> dict:
       cloudtrail = alert.get("aws", {}).get("cloudtrail", {})
       flattened = cloudtrail.get("flattened", {})
 
@@ -57,25 +57,126 @@ def investigator(state: InvestigationState):
          "response_elements": flattened.get("response_elements"),
       }
 
-      response = llm_with_tools.invoke([
+      return context
 
-            HumanMessage( INVESTIGATOR_PROMPT.format(context=context) ),
-            *state.get("messages", []),
+
+def planner( state: InvestigationState):
+      print("\n[Planner] Planning next investigation step...")
+      alert = state["alert"]
+      context = build_alert_context(alert)
+
+      evidence_review = state.get("evidence_review", {})
+
+      plan = planner_llm.invoke(
+            PLANNER_PROMPT.format(
+                  context = json.dumps(context, indent=2),
+                  evidence_review = json.dumps(evidence_review, indent=2),
+                  available_tools = available_tools,
+            )
+      )
+      print("[Planner] Plan:")
+      print(plan.model_dump())
+      return {"plan": plan.model_dump()}
+
+
+def executor( state: InvestigationState):
+      print("\n[Executor] Converting plan into tool call...")
+      alert = state["alert"]
+      context = build_alert_context(alert)
+
+      plan = state["plan"]
+      evidence_review = state.get("evidence_review", {})
+
+      response = executor_llm.invoke([
+            HumanMessage(
+                  EXECUTOR_PROMPT.format(
+                        context = json.dumps( context, indent=2),
+                        plan = json.dumps( plan, indent = 2),
+                        evidence_review = json.dumps( evidence_review, indent= 2),
+                  )
+            )
       ])
+      print("\n[Executor]")
+      print("content:", response.content)
+      print("reasoning:", response.additional_kwargs.get("reasoning_content"))
+      print("tool_calls:", response.tool_calls)
 
-      print(response.tool_calls)
-      return {"messages": [ response ]}
+      if len(response.tool_calls) != 1:
+         raise RuntimeError("Executor must produce exactly one tool call.")
 
-def route_after_investigator(state: InvestigationState):
-      if state["messages"][-1].tool_calls:
-         return "tools"
-      return "final_verdict"
+      return {"messages": [response]}
+
+
+def reviewer( state: InvestigationState):
+      print("\n[Reviewer] Reviewing latest tool result...")
+
+      alert = state["alert"]
+      context = build_alert_context(alert)
+
+      plan = state["plan"]
+      previous_review = state.get("evidence_review", {})
+      tool_result = state["messages"][-1].content # latest tool result
+
+      review = reviewer_llm.invoke([
+            HumanMessage(
+                 REVIEWER_PROMPT.format(
+                        context = json.dumps( context, indent = 2),
+                        plan = json.dumps( plan, indent = 2),
+                        previous_review = json.dumps( previous_review, indent = 2),
+                        tool_result = tool_result,         
+                 )
+            )
+      ])
+      print("[Reviewer] Evidence review:")
+      print(review.model_dump())
+      return {"evidence_review": review.model_dump()}
+
+
+def route_after_planner(state: InvestigationState):
+      plan = state["plan"]
+
+      if plan["should_stop"]:
+            return "final_verdict"
+      
+      return "executor"
+
+
+# def investigator(state: InvestigationState):
+#       alert = state["alert"]
+#       context = build_alert_context(alert)
+
+#       response = base_llm.invoke([
+#             HumanMessage( INVESTIGATOR_PROMPT.format(context=context) ),
+#             *state.get("messages", []),
+#       ])
+
+#       print(response.tool_calls)
+#       return {"messages": [ response ]}
+
+
+
+# def route_after_investigator(state: InvestigationState):
+#       if state["messages"][-1].tool_calls:
+#          return "tools"
+
+#       return "final_verdict"
+
 
 def final_verdict(state: InvestigationState):
+      alert = state["alert"]
+      context = build_alert_context(alert)
 
-      response = llm.invoke([
-         *state["messages"],
-         HumanMessage( content = FINAL_VERDICT_PROMPT )
+      plan = state.get("plan", {})
+      evidence_review = state.get("evidence_review", {})
+
+      response = base_llm.invoke([
+         HumanMessage( 
+               FINAL_VERDICT_PROMPT.format(
+                     context = json.dumps(context, indent=2),
+                     evidence_review = json.dumps(evidence_review, indent=2),
+                     stop_reason = plan.get("stop_reason")
+               )
+         )
       ])
 
       return {"verdict": response.content}
@@ -87,20 +188,30 @@ def final_verdict(state: InvestigationState):
 
 builder = StateGraph(InvestigationState)
 
+# nodes
 builder.add_node("load_alert", load_alert)
-builder.add_node("investigator", investigator)
+# builder.add_node("investigator", investigator)
+builder.add_node("planner", planner)
+builder.add_node("executor", executor)
 builder.add_node("tools", ToolNode(tools))
+builder.add_node("reviewer", reviewer)
 builder.add_node("final_verdict", final_verdict)
 
-
+# edges
 builder.add_edge(START, "load_alert")
-builder.add_edge("load_alert", "investigator")
+builder.add_edge("load_alert", "planner")
 
 builder.add_conditional_edges(
-     "investigator", route_after_investigator
+     source="planner", 
+     path =route_after_planner,
+     path_map = {"executor": "executor", 
+                 "final_verdict": "final_verdict"}
 )
 
-builder.add_edge("tools", "investigator")
+builder.add_edge("executor", "tools")
+builder.add_edge("tools", "reviewer")
+builder.add_edge("reviewer", "planner")
+
 builder.add_edge("final_verdict", END)
 
 graph = builder.compile()
