@@ -1,6 +1,11 @@
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import HumanMessage 
 from langgraph.prebuilt import ToolNode
+from langchain_core.exceptions import OutputParserException
+from pydantic import ValidationError
+
+MAX_PLAN_ATTEMPTS = 3
+MAX_REVIEW_ATTEMPTS = 3
 
 from agentic_soc.agent.state import InvestigationState
 from agentic_soc.agent.llm import base_llm, planner_llm, reviewer_llm
@@ -56,27 +61,50 @@ def build_alert_context(alert: dict) -> dict:
          "request_parameters": flattened.get("request_parameters"),
          "response_elements": flattened.get("response_elements"),
       }
-
       return context
 
 
-def planner( state: InvestigationState):
+def planner( state: InvestigationState ):
       print("\n[Planner] Planning next investigation step...")
       alert = state["alert"]
       context = build_alert_context(alert)
 
       evidence_review = state.get("evidence_review", {})
 
-      plan = planner_llm.invoke(
-            PLANNER_PROMPT.format(
+      prompt = PLANNER_PROMPT.format(
                   context = json.dumps(context, indent=2),
                   evidence_review = json.dumps(evidence_review, indent=2),
                   available_tools = available_tools,
-            )
       )
-      print("[Planner] Plan:")
-      print(plan.model_dump())
-      return {"plan": plan.model_dump()}
+
+      for attempt in range(MAX_PLAN_ATTEMPTS):
+
+         try:
+            # plan = planner_llm.invoke(prompt)
+
+            plan = planner_llm.invoke([
+                  HumanMessage(prompt),
+                  *state.get("messages", [])  # pass along all previous messages to the planner for context
+            ])
+
+
+            if plan is None:
+                raise OutputParserException("No structured plan returned.")
+
+            print("[Planner] Plan:")
+            print(plan.model_dump())
+      
+            return {"plan": plan.model_dump()}
+
+         except (ValidationError, OutputParserException) as e:
+
+            if attempt == MAX_PLAN_ATTEMPTS - 1:
+                 raise
+
+            prompt += (
+                        f"\n\nYour previous output failed validation:\n{e}\n"
+                         "Correct the errors and regenerate the plan."
+            )
 
 
 def executor( state: InvestigationState):
@@ -115,18 +143,44 @@ def reviewer( state: InvestigationState):
 
       plan = state["plan"]
       previous_review = state.get("evidence_review", {})
+
+      tool_call = state["messages"][-2].tool_calls[0] # latest tool call
       tool_result = state["messages"][-1].content # latest tool result
 
-      review = reviewer_llm.invoke([
-            HumanMessage(
-                 REVIEWER_PROMPT.format(
+      prompt = REVIEWER_PROMPT.format(
                         context = json.dumps( context, indent = 2),
                         plan = json.dumps( plan, indent = 2),
                         previous_review = json.dumps( previous_review, indent = 2),
+                        tool_call = json.dumps( tool_call, indent=2 ),
                         tool_result = tool_result,         
                  )
-            )
-      ])
+      for attempt in range(MAX_REVIEW_ATTEMPTS):
+
+           try: 
+                review = reviewer_llm.invoke([
+                          HumanMessage(prompt)
+                ])
+                print(f"[Reviewer] Evidence review: {review.model_dump()}")
+
+                return {"evidence_review": review.model_dump()}
+
+           except (ValidationError, OutputParserException) as e:
+
+                if attempt == MAX_REVIEW_ATTEMPTS - 1:
+                     raise
+
+                prompt += (
+                        f"\n\nPrevious review failed validation:\n{e}\n"
+                        "Correct the errors and regenerate the review."
+                  )
+
+
+
+      # review = reviewer_llm.invoke([
+      #       HumanMessage(
+
+      #       )
+      # ])
       print("[Reviewer] Evidence review:")
       print(review.model_dump())
       return {"evidence_review": review.model_dump()}

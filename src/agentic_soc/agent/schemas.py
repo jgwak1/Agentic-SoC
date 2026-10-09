@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 class InvestigationPlan(BaseModel):
 
@@ -25,22 +25,43 @@ class InvestigationPlan(BaseModel):
       should_stop: bool
       stop_reason: str | None = None
 
+      @model_validator(mode="after")
+      def validate_plan(self):
+
+            if self.should_stop and not self.stop_reason:
+                  raise ValueError("Stopping requires a reason.")
+
+            if not self.should_stop and not all([
+                  self.current_question,
+                  self.evidence_needed,
+                  self.action_intent,
+                  self.tool_name,
+            ]):
+                  raise ValueError("Continuing requires a complete plan.")
+
+            return self
+               
 
 class EvidenceReview(BaseModel):
 
    established_facts: list[str] = Field(
-      default_factory=list,
       description="The established facts supported by the tool results gathered so far."
    )
 
    open_questions: list[str] = Field(
-      default_factory=list,
       description="The questions that remain to be answered."
    )
 
    evidence_gaps: list[str] = Field(
-      default_factory=list,
       description="The missing evidence needed to answer the open questions."
    )
 
    current_question_resolved: bool = False
+
+   @model_validator(mode="after")
+   def validate_review(self):
+      if not self.current_question_resolved: 
+         if not (self.open_questions or self.evidence_gaps):
+             raise ValueError("An unresolved question requires either an open question or evidence gap.")
+         
+      return self
