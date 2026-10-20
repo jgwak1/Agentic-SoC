@@ -64,46 +64,112 @@ def build_alert_context(alert: dict) -> dict:
       return context
 
 
-def planner( state: InvestigationState ):
-      print("\n[Planner] Planning next investigation step...")
-      alert = state["alert"]
-      context = build_alert_context(alert)
+def planner(state: InvestigationState):
+    print("\n[Planner] Planning next investigation step...")
+    alert = state["alert"]
+    context = build_alert_context(alert)
+    context["rule_investigation_guide"] = alert.get("kibana.alert.rule.note")
 
-      evidence_review = state.get("evidence_review", {})
+    evidence_review = state.get("evidence_review", {})
 
-      prompt = PLANNER_PROMPT.format(
-                  context = json.dumps(context, indent=2),
-                  evidence_review = json.dumps(evidence_review, indent=2),
-                  available_tools = available_tools,
-      )
+    facts = {
+        **{
+            f"alert.{name}": value
+            for name, value in context.items()
+            if name != "rule_investigation_guide" and value is not None
+        },
+        **{
+            f"f{i+1}": fact
+            for i, fact in enumerate(
+                evidence_review.get("established_facts", [])
+            )
+        },
+    }
 
-      for attempt in range(MAX_PLAN_ATTEMPTS):
+    questions = list(dict.fromkeys([
+        *state.get("questions", []),
+        *evidence_review.get("open_questions", []),
+    ]))
 
-         try:
-            # plan = planner_llm.invoke(prompt)
+    prompt = PLANNER_PROMPT.format(
+        context=json.dumps(context, indent=2),
+        evidence_review=json.dumps(evidence_review, indent=2),
+        available_tools=available_tools,
+    )
 
+    guide = context["rule_investigation_guide"]
+    print(
+        "[Planner] Guide included:",
+        bool(guide) and json.dumps(guide) in prompt,
+    )
+
+    for attempt in range(MAX_PLAN_ATTEMPTS):
+        try:
             plan = planner_llm.invoke([
-                  HumanMessage(prompt),
-                  *state.get("messages", [])  # pass along all previous messages to the planner for context
+                HumanMessage(
+                    prompt
+                    + "\n\nTracked questions:\n"
+                    + json.dumps(
+                        {f"q{i+1}": q for i, q in enumerate(questions)},
+                        indent=2,
+                    )
+                ),
+                *state.get("messages", []),
             ])
-
 
             if plan is None:
                 raise OutputParserException("No structured plan returned.")
 
+            if set(plan.fact_assessments) != set(facts):
+                raise OutputParserException(
+                    "Assess every supplied fact using exactly these IDs: "
+                    f"{list(facts)}"
+                )
+
+            for assessment in plan.fact_assessments.values():
+                for question in assessment.follow_up_questions:
+                    if question and question not in questions:
+                        questions.append(question)
+
+
+            if plan.current_question and plan.current_question not in questions:
+                questions.append(plan.current_question)
+
+            if plan.should_stop:
+                expected_ids = {
+                    f"q{i+1}" for i in range(len(questions))
+                }
+
+                if set(plan.question_assessments) != expected_ids:
+                    raise OutputParserException(
+                        "Stopping requires an assessment for every tracked "
+                        f"question, using exactly these IDs: {sorted(expected_ids)}"
+                    )
+
+                if plan.stop_basis == "no_actionable_path" and any(
+                    assessment.status not in {"resolved", "blocked"}
+                    for assessment in plan.question_assessments.values()
+                ):
+                    raise OutputParserException(
+                        "An actionable question remains. Continue investigating, "
+                        "or justify stopping on sufficient evidence."
+                    )
+
             print("[Planner] Plan:")
             print(plan.model_dump())
-      
-            return {"plan": plan.model_dump()}
 
-         except (ValidationError, OutputParserException) as e:
+            return {
+                "plan": plan.model_dump(),
+                "questions": questions,
+            }
 
+        except (ValidationError, OutputParserException) as e:
             if attempt == MAX_PLAN_ATTEMPTS - 1:
-                 raise
+                raise
 
             prompt += (
-                        f"\n\nYour previous output failed validation:\n{e}\n"
-                         "Correct the errors and regenerate the plan."
+                f"\n\nYour previous output failed validation:\n{e}\n"
+                "Correct the errors and regenerate the plan."
             )
 
 
@@ -162,7 +228,17 @@ def reviewer( state: InvestigationState):
                 ])
                 print(f"[Reviewer] Evidence review: {review.model_dump()}")
 
-                return {"evidence_review": review.model_dump()}
+            #     return {"evidence_review": review.model_dump()}
+
+                questions = list(dict.fromkeys([
+                    *state.get("questions", []),
+                    *review.open_questions,
+                ]))
+
+                return {
+                    "evidence_review": review.model_dump(),
+                    "questions": questions,
+                }
 
            except (ValidationError, OutputParserException) as e:
 

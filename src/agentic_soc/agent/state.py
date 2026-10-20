@@ -10,7 +10,7 @@ class InvestigationState(TypedDict, total = False):
       alert : dict[str, Any]
       messages: Annotated[ list[AnyMessage], add_messages ]
 
-
+      questions: list[str]
 
       plan: dict[ str, Any ] | None
       evidence_review: dict[ str, Any] | None

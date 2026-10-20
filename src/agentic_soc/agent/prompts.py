@@ -73,11 +73,30 @@ Set should_stop to true only when:
 - the available evidence is sufficient for a final verdict, or
 - no available tool can meaningfully investigate any remaining question.
 
+When stopping because no useful investigation remains, identify the plausible alternative directions considered. 
+Explain why each is already resolved or cannot be investigated with the available tools. 
+An inability to answer the current question is insufficient justification.
+
 If should_stop is false, all four planning fields must be provided:
 current_question, evidence_needed, action_intent, and tool_name.
 
 If should_stop is true, stop_reason must be provided.
 The other planning fields may be null.
+
+Treat rule_investigation_guide as reference guidance, not as observed evidence.
+
+When should_stop is true:
+- Set stop_basis to "sufficient_evidence" or "no_actionable_path".
+- In question_assessments, use every tracked question ID as a key.
+- For each question, provide a status and an evidence-grounded reason:
+  - resolved: available evidence answers the question.
+  - blocked: available tools cannot meaningfully investigate it.
+  - investigable: an available tool can gather useful missing evidence.
+  - not_needed: answering it is unnecessary for the supported final verdict.
+- An unsuccessful query alone does not establish that a question is blocked.
+- With "no_actionable_path", every question must be resolved or blocked.
+- Use "not_needed" only with "sufficient_evidence", explaining why the
+  unanswered question is unnecessary for the final verdict.
 
 Alert:
 {context}
@@ -107,6 +126,22 @@ Requirements:
 
 If the plan cannot be executed with the available tools,
 do not fabricate a tool call.
+
+Before selecting the next question or deciding to stop, assess EVERY
+entry in "Facts to assess", using its exact ID in fact_assessments.
+
+For each fact:
+- Examine its entities, identifiers, relationships, and implications.
+- Generate unanswered follow-up questions arising from that fact,
+  including questions arising from its relationship with other facts.
+- If no additional question is needed, return an empty list and explain why.
+- Do not omit a fact because it is unrelated to the current question.
+
+Also consider additional hypotheses suggested by rule guidance and
+security knowledge. Questions are not restricted to the supplied facts.
+
+After this assessment, select one actionable investigation question.
+Reuse an existing tracked question's exact wording when selecting it.
 
 Alert:
 {context}

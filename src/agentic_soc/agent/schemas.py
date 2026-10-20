@@ -1,5 +1,15 @@
 from pydantic import BaseModel, Field, model_validator
 
+from typing import Literal
+
+class QuestionAssessment(BaseModel):
+     status : Literal["resolved", "blocked", "investigable", "not_needed"]
+     reason: str = Field(min_length=1)
+     
+class FactAssessment(BaseModel):
+    follow_up_questions: list[str]
+    reason: str = Field(min_length=1)
+
 class InvestigationPlan(BaseModel):
 
       current_question : str | None = Field(
@@ -23,7 +33,35 @@ class InvestigationPlan(BaseModel):
       )
 
       should_stop: bool
-      stop_reason: str | None = None
+
+      stop_reason: str | None = Field(
+          description=(
+              "Explain in plain language why the investigation should stop. "
+              "Use null when continuing."
+          )
+      )
+
+      stop_basis: Literal["sufficient_evidence", "no_actionable_path"] | None = Field(
+          description=(
+              "The stopping category: sufficient_evidence or no_actionable_path. "
+              "Use null when continuing."
+          )
+      )
+
+      question_assessments: dict[str, QuestionAssessment] = Field(
+          description=(
+              "Assess every tracked question ID when stopping. "
+              "Use an empty object when continuing."
+          )
+      )
+
+      fact_assessments: dict[str, FactAssessment] = Field(
+          description=(
+              "Assess every supplied fact ID. Generate follow-up questions, "
+              "or explain why no additional question is needed."
+          )
+      )      
+
 
       @model_validator(mode="after")
       def validate_plan(self):
@@ -38,6 +76,10 @@ class InvestigationPlan(BaseModel):
                   self.tool_name,
             ]):
                   raise ValueError("Continuing requires a complete plan.")
+
+            if self.should_stop and self.stop_basis is None:
+                 raise ValueError("Stopping requires a stop_basis.")
+
 
             return self
                
