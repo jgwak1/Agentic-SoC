@@ -98,6 +98,22 @@ When should_stop is true:
 - Use "not_needed" only with "sufficient_evidence", explaining why the
   unanswered question is unnecessary for the final verdict.
 
+  Before selecting the next question or deciding to stop, assess EVERY
+entry in "Facts to assess", using its exact ID in fact_assessments.
+
+For each fact:
+- Examine its entities, identifiers, relationships, and implications.
+- Generate unanswered follow-up questions arising from that fact,
+  including questions arising from its relationship with other facts.
+- If no additional question is needed, return an empty list and explain why.
+- Do not omit a fact because it is unrelated to the current question.
+
+Also consider additional hypotheses suggested by rule guidance and
+security knowledge. Questions are not restricted to the supplied facts.
+
+After this assessment, if should_stop is false, select one actionable investigation question.
+Reuse an existing tracked question's exact wording when selecting it.
+
 Alert:
 {context}
 
@@ -127,21 +143,6 @@ Requirements:
 If the plan cannot be executed with the available tools,
 do not fabricate a tool call.
 
-Before selecting the next question or deciding to stop, assess EVERY
-entry in "Facts to assess", using its exact ID in fact_assessments.
-
-For each fact:
-- Examine its entities, identifiers, relationships, and implications.
-- Generate unanswered follow-up questions arising from that fact,
-  including questions arising from its relationship with other facts.
-- If no additional question is needed, return an empty list and explain why.
-- Do not omit a fact because it is unrelated to the current question.
-
-Also consider additional hypotheses suggested by rule guidance and
-security knowledge. Questions are not restricted to the supplied facts.
-
-After this assessment, select one actionable investigation question.
-Reuse an existing tracked question's exact wording when selecting it.
 
 Alert:
 {context}

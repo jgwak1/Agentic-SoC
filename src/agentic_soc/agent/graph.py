@@ -8,7 +8,8 @@ MAX_PLAN_ATTEMPTS = 3
 MAX_REVIEW_ATTEMPTS = 3
 
 from agentic_soc.agent.state import InvestigationState
-from agentic_soc.agent.llm import base_llm, planner_llm, reviewer_llm
+from agentic_soc.agent.llm import base_llm, reviewer_llm
+from agentic_soc.agent.schemas import InvestigationPlan
 from agentic_soc.agent.prompts import PLANNER_PROMPT, EXECUTOR_PROMPT, REVIEWER_PROMPT, FINAL_VERDICT_PROMPT
 
 from agentic_soc.elastic.client import ElasticClient
@@ -86,6 +87,19 @@ def planner(state: InvestigationState):
         },
     }
 
+    # Fix each round's fact IDs in the generation schema.
+    plan_schema = InvestigationPlan.model_json_schema()
+    assessment_schema = plan_schema["properties"]["fact_assessments"]
+    assessment_type = assessment_schema["additionalProperties"]
+    assessment_schema.update(
+        properties={fact_id: assessment_type for fact_id in facts},
+        required=list(facts),
+        additionalProperties=False,
+    )
+    round_planner_llm = base_llm.with_structured_output(
+        plan_schema, method="json_schema"
+    )
+
     questions = list(dict.fromkeys([
         *state.get("questions", []),
         *evidence_review.get("open_questions", []),
@@ -105,26 +119,48 @@ def planner(state: InvestigationState):
 
     for attempt in range(MAX_PLAN_ATTEMPTS):
         try:
-            plan = planner_llm.invoke([
-                HumanMessage(
-                    prompt
-                    + "\n\nTracked questions:\n"
-                    + json.dumps(
+
+            plan = round_planner_llm.invoke([
+            HumanMessage(
+                  prompt
+                  + "\n\nFacts to assess:\n"
+                  + json.dumps(facts, indent=2)
+                  + "\n\nTracked questions:\n"
+                  + json.dumps(
                         {f"q{i+1}": q for i, q in enumerate(questions)},
                         indent=2,
-                    )
-                ),
-                *state.get("messages", []),
+                  )
+            ),
+            *state.get("messages", []),
             ])
+
 
             if plan is None:
                 raise OutputParserException("No structured plan returned.")
 
-            if set(plan.fact_assessments) != set(facts):
-                raise OutputParserException(
-                    "Assess every supplied fact using exactly these IDs: "
-                    f"{list(facts)}"
+            plan = InvestigationPlan.model_validate(plan)
+
+            expected_fact_ids = set(facts)
+            returned_fact_ids = set(plan.fact_assessments)
+
+            if returned_fact_ids != expected_fact_ids:
+                message = (
+                    "Fact assessment IDs do not match the supplied facts. "
+                    f"Missing IDs: {sorted(expected_fact_ids - returned_fact_ids)}. "
+                    f"Unexpected IDs: {sorted(returned_fact_ids - expected_fact_ids)}."
                 )
+                print(
+                    f"[Planner] Fact coverage attempt "
+                    f"{attempt + 1}/{MAX_PLAN_ATTEMPTS}: {message}",
+                    flush=True,
+                )
+                raise OutputParserException(message)
+
+            # if set(plan.fact_assessments) != set(facts):
+            #     raise OutputParserException(
+            #         "Assess every supplied fact using exactly these IDs: "
+            #         f"{list(facts)}"
+            #     )
 
             for assessment in plan.fact_assessments.values():
                 for question in assessment.follow_up_questions:
