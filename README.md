@@ -30,10 +30,10 @@ LangGraph investigator
 
 ```text
 infra/terraform/     AWS infrastructure
-scripts/scenarios/   repeatable security scenarios
-scripts/elastic/     Elastic configuration automation
+scripts/scenarios/  repeatable security scenarios
+scripts/elastic/    Elastic configuration automation
 src/agentic_soc/     Agentic SOC application code
-docs/                design and implementation notes
+docs/               design and implementation notes
 ```
 
 ## Investigation Model
@@ -50,6 +50,27 @@ Why   — is there evidence of a legitimate explanation?
 ```
 
 The investigation workflow is designed to produce structured findings with a timeline, supporting evidence, and explicit uncertainty.
+
+### Planned investigation workflow
+
+One Planner call assesses the supplied questions and proposes new questions in separate output fields. Python checks the reply before adding new questions.
+
+```mermaid
+flowchart TD
+    P["Planner (one call)"] --> V{"Python checks reply"}
+    V -->|"Invalid: keep questions unchanged and retry"| P
+    V -->|"Valid"| A["Add accepted new questions"]
+    A -->|"Continue"| T["Run investigation tool"]
+    T --> R["Reviewer: answer, evidence, gaps"]
+    R --> U["Python updates question state"]
+    U -->|"Next round"| P
+    U -->|"Answered"| C["Completed answers and evidence"]
+    C -.->|"Prompt context"| P
+    A -->|"No further investigation needed"| F["Final verdict and report"]
+    C -.->|"Prompt context"| F
+```
+
+The Planner receives the original alert, active questions, evidence gaps, and completed answers as prompt context. Completed questions are retained as reference and excluded from selection. The final verdict uses the original alert, accumulated findings, completed answers, and remaining gaps.
 
 ## Security
 
