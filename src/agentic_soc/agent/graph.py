@@ -36,7 +36,11 @@ executor_llm = base_llm.bind_tools(tools)
 
 def load_alert(state: InvestigationState):
       client = ElasticClient()
-      return {"alert": client.get_alert(state["alert_id"])}
+      return {"alert": client.get_alert(state["alert_id"]),
+              "active_questions": {},    # no questions have been registered yet.
+              "completed_questions": {}, # nothing has been answered yet.
+              "next_question_number": 1, # first question added will receive ID q1.
+              }
 
 
 def build_alert_context(alert: dict) -> dict:
@@ -64,7 +68,46 @@ def build_alert_context(alert: dict) -> dict:
       }
       return context
 
+def register_questions( state: InvestigationState, new_questions: list[str]):
+     
+     # Work on a copy so new questions (e.g., Q3) aren't saved immediately.
+     #  Python first checks whether Planner's reply meets the requirements.
+     #  If plan.should_stop is True, Planner must also report the status
+     #  of every existing question (answered, still investigable, etc.).
+     #  If any check fails, discard the copy and later retry the Planner call. Otherwise, save the new questions.
+     active = state["active_questions"].copy()
+     
+     completed = state["completed_questions"]
+     next_num = state["next_question_number"]
 
+     # Collect existing question texts to avoid adding duplicates.
+     existing = set(active.values())
+     existing.update( q["question"] for q in completed.values() )
+
+     for question in new_questions:
+          question = question.strip()
+
+          # Skip empty questions or questions already active or completed 
+          #  (naive exact duplicate check; doesn't handle paraphrasing of semantically same question)
+          if not question or question in existing:
+               continue
+
+          # Assign a permanent ID (q1, q2, ...) to each new question.
+          active[f"q{next_num}"] = question
+          existing.add(question)
+          next_num += 1
+
+     # Return updated values without modifying the original state.
+     return active, next_num
+
+
+
+# TODO (Future): Support parallel investigation of multiple questions.
+# Currently, Planner selects one current_question per round.
+# Later, LangGraph could investigate Q1, Q2, Q3 simultaneously rather than sequentially.
+# Each parallel investigation must preserve its question ID so Python can
+# associate tool results, Reviewer findings, and status updates with the correct question.
+# Implement after the sequential workflow is stable.
 def planner(state: InvestigationState):
     print("\n[Planner] Planning next investigation step...")
     alert = state["alert"]
@@ -117,6 +160,16 @@ def planner(state: InvestigationState):
         bool(guide) and json.dumps(guide) in prompt,
     )
 
+    # Keep a fixed copy of the questions sent to Planner.
+    # Even if Planner newly suggests Q3, only the original Q1 and Q2
+    # should be checked when validating this reply 
+    #   (i.e., when plan.should_stop=True, Python checks whether Planner reported
+    #          an investigation status for EACH original question (Q1 and Q2),
+    #          indicating whether it is resolved, blocked, or still investigable.
+    #          When plan.should_stop=False, Python skips this question-status check).
+    # (Later, we could use separate LLM calls for question assessment and generation.) 
+    questions_sent = state["active_questions"].copy()
+
     for attempt in range(MAX_PLAN_ATTEMPTS):
         try:
 
@@ -125,11 +178,13 @@ def planner(state: InvestigationState):
                   prompt
                   + "\n\nFacts to assess:\n"
                   + json.dumps(facts, indent=2)
+                #   + "\n\nTracked questions:\n"
+                #   + json.dumps(
+                #         {f"q{i+1}": q for i, q in enumerate(questions)},
+                #         indent=2,
                   + "\n\nTracked questions:\n"
-                  + json.dumps(
-                        {f"q{i+1}": q for i, q in enumerate(questions)},
-                        indent=2,
-                  )
+                  + json.dumps(questions_sent, indent=2)
+
             ),
             *state.get("messages", []),
             ])
@@ -162,19 +217,23 @@ def planner(state: InvestigationState):
             #         f"{list(facts)}"
             #     )
 
-            for assessment in plan.fact_assessments.values():
-                for question in assessment.follow_up_questions:
-                    if question and question not in questions:
-                        questions.append(question)
+            # for assessment in plan.fact_assessments.values():
+            #     for question in assessment.follow_up_questions:
+            #         if question and question not in questions:
+            #             questions.append(question)
 
-
-            if plan.current_question and plan.current_question not in questions:
-                questions.append(plan.current_question)
+            # if plan.current_question and plan.current_question not in questions:
+            #     questions.append(plan.current_question)
 
             if plan.should_stop:
-                expected_ids = {
-                    f"q{i+1}" for i in range(len(questions))
-                }
+                # expected_ids = {
+                #     f"q{i+1}" for i in range(len(questions))
+                # }
+
+                # Check only the original question IDs sent to Planner (e.g., Q1, Q2).
+                # Newly generated questions (e.g., Q3) don't require assessment yet.                
+                expected_ids = set(questions_sent)
+
 
                 if set(plan.question_assessments) != expected_ids:
                     raise OutputParserException(
@@ -191,12 +250,45 @@ def planner(state: InvestigationState):
                         "or justify stopping on sufficient evidence."
                     )
 
+            # All planner response checks have passed. 
+            # Now, collect new questions generated by Planner
+            new_questions = []
+
+            for assessment in plan.fact_assessments.values():
+                 new_questions.extend(assessment.follow_up_questions)
+
+            if plan.current_question:
+                 new_questions.append(plan.current_question)
+
+            # Assign IDs to newly generatd questions without modifying the original state
+            updated_active, updated_next_num = register_questions( state, new_questions )
+
+            # Match Planner's selected question to its permanent ID
+            plan_data = plan.model_dump()
+
+            if not plan.should_stop:
+
+                # Python finds the ID for plan.current_question and stores that ID alongside the plan.
+                # No need to rely on Qwen which could hallucinate
+                selected_id = next( (qid for qid, question in updated_active.items() \
+                                      if question == plan.current_question.strip()), None )
+                
+                # Retry Planner later if its selected question has no registered ID.
+                if selected_id is None:
+                     raise OutputParserException("Planner's selected question wasn't registered")
+                
+                plan_data["current_question_id"] = selected_id
+
+
             print("[Planner] Plan:")
-            print(plan.model_dump())
+            print(plan_data)
 
             return {
-                "plan": plan.model_dump(),
-                "questions": questions,
+                # "plan": plan.model_dump(),
+                # "questions": questions,
+                "plan": plan_data,
+                "active_questions": updated_active,
+                "next_question_number": updated_next_num
             }
 
         except (ValidationError, OutputParserException) as e:
