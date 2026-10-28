@@ -85,6 +85,25 @@ The other planning fields may be null.
 
 Treat rule_investigation_guide as reference guidance, not as observed evidence.
 
+Evidence gap handling:
+- For EVERY ID in "Evidence gaps to assign", return an entry in gap_assignments.
+- Either link the gap to an existing active question using existing_question_id,
+  or propose a new investigation question using new_question.
+- For each gap, fill exactly one of existing_question_id or new_question, and set the other to null.
+- Use only question IDs supplied under "Tracked questions".
+- If no evidence gaps are supplied, return an empty dictionary.
+
+For individual questions that cannot be meaningfully investigated further:
+- Report their existing question IDs and reasons in questions_to_block.
+- Use only IDs provided under "Tracked questions".
+- Do not mark a question blocked merely because one query failed;
+  consider whether another useful investigation approach exists.
+- Do not select a question being blocked as current_question.
+- Use an empty dictionary if no questions should be blocked.
+
+Individual questions can be blocked even when should_stop is false
+and the overall investigation continues.
+
 When should_stop is true:
 - Set stop_basis to "sufficient_evidence" or "no_actionable_path".
 - In question_assessments, use every tracked question ID as a key.
@@ -113,6 +132,14 @@ security knowledge. Questions are not restricted to the supplied facts.
 
 After this assessment, if should_stop is false, select one actionable investigation question.
 Reuse an existing tracked question's exact wording when selecting it.
+
+Question selection:
+- "Tracked questions" contains active questions available for investigation.
+- Select an active question, or propose a genuinely new question if needed.
+- "Completed questions" contains previously answered questions and evidence.
+  Use them as reference, but do not investigate or regenerate those questions.
+- "Blocked questions" contains questions that cannot currently be investigated.
+  Use them as reference, but do not select or regenerate those questions.
 
 Alert:
 {context}
@@ -181,6 +208,14 @@ Do not choose the next investigation action or generate a tool call.
 
 If current_question_resolved is false, provide at least one
 open_question or evidence_gap.
+
+For the current investigation question:
+- If current_question_resolved is true, provide:
+  - current_question_answer: the answer supported by the evidence.
+  - current_question_evidence: specific evidence supporting that answer.
+- If current_question_resolved is false, set:
+  - current_question_answer: null
+  - current_question_evidence: []
 
 Alert:
 {context}

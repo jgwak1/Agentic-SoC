@@ -10,6 +10,20 @@ class FactAssessment(BaseModel):
     follow_up_questions: list[str]
     reason: str = Field(min_length=1)
 
+class GapAssignment(BaseModel):
+     existing_question_id: str | None = None
+     new_question : str | None = None
+
+     @model_validator(mode = "after")
+     def validate_assignment(self):
+          # Each evidence-gap must link to an existing question OR propose a new question
+          # Invalid: Planner selected both options
+          if self.existing_question_id and self.new_question:
+               raise ValueError("Choose only one option.")
+          if not self.existing_question_id and not self.new_question:
+               raise ValueError("Choose only one option.")
+          return self
+
 class InvestigationPlan(BaseModel):
 
       current_question : str | None = Field(
@@ -55,12 +69,29 @@ class InvestigationPlan(BaseModel):
           )
       )
 
+      questions_to_block : dict[str, str] = Field(
+           default_factory = dict,
+           description = (
+                "Map existing active question IDs to reasons they cannot be "
+                "meaningfully investigated with available tools. "
+                "Return an empty dictionary if none."
+           )
+      )
+
       fact_assessments: dict[str, FactAssessment] = Field(
           description=(
               "Assess every supplied fact ID. Generate follow-up questions, "
               "or explain why no additional question is needed."
           )
       )      
+
+      gap_assignements: dict[str, GapAssignment] = Field(
+           default_factory = dict,
+           description = (
+                "For each supplied evidence Gap ID, either link it to an "
+                "existing active question ID or propose a new question."
+           )
+      )
 
 
       @model_validator(mode="after")
@@ -98,12 +129,30 @@ class EvidenceReview(BaseModel):
       description="The missing evidence needed to answer the open questions."
    )
 
+
    current_question_resolved: bool = False
+   
+   current_question_answer : str | None = Field(
+        default = None,
+        description = "Answer to the current question based on evidence; null if unresolved."
+   )
+   current_question_evidence: list[str] = Field(
+        default_factory = list,
+        description = "Specific evidence supporting the answer; empty if unresolved."
+   )
+
+
 
    @model_validator(mode="after")
    def validate_review(self):
       if not self.current_question_resolved: 
          if not (self.open_questions or self.evidence_gaps):
              raise ValueError("An unresolved question requires either an open question or evidence gap.")
-         
+
+      # A question can be marked as resolved only when the Reviewer provides 
+      #  both its answer and supporting evidence
+      if self.current_question_resolved:
+           if not self.current_question_answer or not self.current_question_evidence:
+                raise ValueError("A resolved question requires both an answer and supporting evidence.")
+
       return self

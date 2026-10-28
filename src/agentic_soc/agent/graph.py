@@ -40,6 +40,7 @@ def load_alert(state: InvestigationState):
               "active_questions": {},    # no questions have been registered yet.
               "completed_questions": {}, # nothing has been answered yet.
               "next_question_number": 1, # first question added will receive ID q1.
+              "blocked_questions": {},
               }
 
 
@@ -79,10 +80,12 @@ def register_questions( state: InvestigationState, new_questions: list[str]):
      
      completed = state["completed_questions"]
      next_num = state["next_question_number"]
+     blocked = state["blocked_questions"]
 
      # Collect existing question texts to avoid adding duplicates.
      existing = set(active.values())
      existing.update( q["question"] for q in completed.values() )
+     existing.update( q["question"] for q in blocked.values() )
 
      for question in new_questions:
           question = question.strip()
@@ -143,16 +146,24 @@ def planner(state: InvestigationState):
         plan_schema, method="json_schema"
     )
 
-    questions = list(dict.fromkeys([
-        *state.get("questions", []),
-        *evidence_review.get("open_questions", []),
-    ]))
+    # questions = list(dict.fromkeys([
+    #     *state.get("questions", []),
+    #     *evidence_review.get("open_questions", []),
+    # ]))
 
     prompt = PLANNER_PROMPT.format(
         context=json.dumps(context, indent=2),
         evidence_review=json.dumps(evidence_review, indent=2),
         available_tools=available_tools,
     )
+
+    # Assign an ID (g1, g2, ...) to each evidence gap reported by Reviewer
+    gaps_sent = {
+         f"g{i+1}" : gap for i, gap in enumerate(evidence_review.get("evidence_gaps", []))
+    }
+    # Send these gap-IDs and their corresponding evidence-gaps to the Planner
+    prompt += "\n\nEvidence gaps to assign:\n" + json.dumps(gaps_sent, indent=2)
+
 
     guide = context["rule_investigation_guide"]
     print(
@@ -182,8 +193,14 @@ def planner(state: InvestigationState):
                 #   + json.dumps(
                 #         {f"q{i+1}": q for i, q in enumerate(questions)},
                 #         indent=2,
-                  + "\n\nTracked questions:\n"
-                  + json.dumps(questions_sent, indent=2)
+                #   + "\n\nTracked questions:\n"
+                #   + json.dumps(questions_sent, indent=2)
+
+                  # Provide these as reference, for planning
+                  + "\n\nCompleted questions (reference only; do not investigate again):\n"
+                  + json.dumps(state["completed_questions"], indent=2)
+                  + "\n\nBlocked questions (reference only; do not investigate again):\n"
+                  + json.dumps(state["blocked_questions"], indent=2)
 
             ),
             *state.get("messages", []),
@@ -250,13 +267,70 @@ def planner(state: InvestigationState):
                         "or justify stopping on sufficient evidence."
                     )
 
+            # Validate Planner's blocking decisions before updating the state.
+            blocked_requests = plan.questions_to_block
+
+            # Planner may block only questions that Python actually sent.
+            unknown_ids = set(blocked_requests) - set(questions_sent)
+
+            if unknown_ids:
+                 raise OutputParserException(
+                      f"Cannot block unknown or inactive questions: {sorted(unknown_ids)}"
+                 )
+
+            # Each blocked question must have a meaningful reason.
+            if any(not reason.strip() for reason in blocked_requests.values()):
+                 raise OutputParserException(
+                      "Each blocked question requires a non-empty reason."
+                 )
+
+            # Planner cannot select Q2 for investigation while also blocking Q2.
+            if not plan.should_stop:
+                 if plan.current_question.strip() in {
+                      questions_sent[qid] for qid in blocked_requests
+                 }:
+                    raise OutputParserException(
+                         "Planner selected a question it also marked as blocked."
+                    )
+
+            # Check that Planner handled every supplied gap (g1, g2, ...).
+            expected_gap_ids = set(gaps_sent)
+            returned_gap_ids = set(plan.gap_assignments)
+
+            if returned_gap_ids != expected_gap_ids:
+                 raise OutputParserException(
+                      "Gap assignments do not match the gaps supplied to the Planner. "
+                      f"Missing: {sorted(expected_gap_ids - returned_gap_ids)}. "
+                      f"Unexpected: {sorted(returned_gap_ids - expected_gap_ids)}"
+                 )
+            # If a gap is linked to an existing question, that question must be active.
+            for gap_id, assignment in plan.gap_assignments.items():
+
+                 # if a gap was assigned to an existing question
+                 if assignment.existing_question_id is not None: 
+
+                      # if that question-id actually doesn't correspond to one of the active questions (questions_sent)
+                      if assignment.existing_question_id not in questions_sent:  
+                           raise OutputParserException(
+                                f"{gap_id} refers to an unknown or inactive question: "
+                                f"{assignment.existing_question_id}"
+                           )
+
+
             # All planner response checks have passed. 
             # Now, collect new questions generated by Planner
             new_questions = []
 
+            # Collect new questions generated from fact assessments.
             for assessment in plan.fact_assessments.values():
                  new_questions.extend(assessment.follow_up_questions)
 
+            # Collect new questions proposed to address evidence gaps.
+            for assignment in plan.gap_assingments.values():
+                 if assignment.new_question:
+                      new_questions.append( assignment.new_question )
+
+            # Include Planner's selected question if it is new.
             if plan.current_question:
                  new_questions.append(plan.current_question)
 
@@ -265,6 +339,35 @@ def planner(state: InvestigationState):
 
             # Match Planner's selected question to its permanent ID
             plan_data = plan.model_dump()
+
+            # Connect each evidence gap to the permanent ID of its assigned question.
+            gap_question_ids = {}
+
+            for gap_id, assignment in plan.gap_assignments.items():
+
+                # Case 1: Planner linked the gap to an existing question (e.g., Q2)
+                if assignment.existing_question_id is not None:
+                     question_id = assignment.existing_question_id
+
+                # Case 2: Planner proposed a new quesiton for the gap                 
+                #   find the qid (e.g., Q3) already assigned by register_questions()
+                else:
+                     question_id = None
+                     for qid, question_text in updated_active.items():
+                          if question_text == assignment.new_question_strip():
+                               question_id = qid
+                               break
+                          
+                # Reject the links to non-existent or blocked questions
+                if question_id not in updated_active or question_id in plan.questions_to_block:
+                     raise OutputParserException(f"{gap_id} is not linked to a valid active question.")
+
+                # Save the mapping (e.g., G1 -> Q2)
+                gap_question_ids[gap_id] = question_id
+            
+            # Include the gap-to-question mappings in the plan saved by LangGraph 
+            plan_data["gap_question_ids"] = gap_question_ids
+
 
             if not plan.should_stop:
 
@@ -279,6 +382,15 @@ def planner(state: InvestigationState):
                 
                 plan_data["current_question_id"] = selected_id
 
+                # Move accepted blocked questions from active to blocked records.
+                updated_blocked = state["blocked_questions"].copy()
+
+                for qid, reason in blocked_requests.items():
+                     updated_blocked[qid] = {
+                          "question": updated_active.pop(qid),
+                          "reason": reason.strip(),
+                     }
+            
 
             print("[Planner] Plan:")
             print(plan_data)
@@ -288,7 +400,9 @@ def planner(state: InvestigationState):
                 # "questions": questions,
                 "plan": plan_data,
                 "active_questions": updated_active,
-                "next_question_number": updated_next_num
+                "next_question_number": updated_next_num,
+                "blocked_questions": updated_blocked,
+                # don't need to return completed_questions here as LangGraph preserves that field.
             }
 
         except (ValidationError, OutputParserException) as e:
@@ -358,15 +472,46 @@ def reviewer( state: InvestigationState):
 
             #     return {"evidence_review": review.model_dump()}
 
-                questions = list(dict.fromkeys([
-                    *state.get("questions", []),
-                    *review.open_questions,
-                ]))
+                # questions = list(dict.fromkeys([
+                #     *state.get("questions", []),
+                #     *review.open_questions,
+                # ]))
 
-                return {
-                    "evidence_review": review.model_dump(),
-                    "questions": questions,
-                }
+                # return {
+                #     "evidence_review": review.model_dump(),
+                #     "questions": questions,
+                # }
+
+
+                # Register new unresolved questions suggested by Reviewer
+                updated_active, updated_next_num = register_questions(
+                     state, review.open_questions
+                )
+                # Copy completed records before making changes. 
+                updated_completed = state["completed_questions"].copy()
+
+                # Retrieve permanent-ID of the question investigated in this round.
+                current_qid = plan["current_question_id"]
+                if current_qid not in updated_active:
+                     raise OutputParserException(
+                          f"Current question {current_qid} is missing from active_questions."
+                     )
+                if review.current_question_resolved:
+                    # Move the answered question from active to completed, 
+                    # preserving its answer and supporting evidence.
+                    updated_completed["current_id"] = {
+                         "question": updated_active.pop(current_qid),
+                         "answer": review.current_question_answer,
+                         "evidence": review.current_question_evidence
+                    }
+                    return {
+                         "evidence_review" : review.model_dump(),
+                         "active_questions": updated_active,
+                         "completed_questions": updated_completed,
+                         "next_question_number": updated_next_num
+                    }
+
+
 
            except (ValidationError, OutputParserException) as e:
 
