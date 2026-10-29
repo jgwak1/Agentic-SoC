@@ -117,21 +117,44 @@ def planner(state: InvestigationState):
     context = build_alert_context(alert)
     context["rule_investigation_guide"] = alert.get("kibana.alert.rule.note")
 
-    evidence_review = state.get("evidence_review", {})
+    # evidence_review = state.get("evidence_review", {})
+    # facts = {
+    #     **{
+    #         f"alert.{name}": value
+    #         for name, value in context.items()
+    #         if name != "rule_investigation_guide" and value is not None
+    #     },
+    #     **{
+    #         f"f{i+1}": fact
+    #         for i, fact in enumerate(
+    #             evidence_review.get("established_facts", [])
+    #         )
+    #     },
+    # }
 
-    facts = {
-        **{
+
+    evidence_review = state.get("evidence_review") or {}
+    # Assess the original alert fields only in the first Planner round,
+    # instead of redundantly reassessing them across all rounds.
+    # In later rounds, assess newly established facts from Reviewer (i.e., evidence_review["established_facts"]).
+    # The original alert remains available to Planner as context in every round.
+    facts = {}
+
+    # First round: include original alert fields for assessment.
+    if state.get("plan") is None:
+        facts.update({
             f"alert.{name}": value
             for name, value in context.items()
             if name != "rule_investigation_guide" and value is not None
-        },
-        **{
-            f"f{i+1}": fact
-            for i, fact in enumerate(
-                evidence_review.get("established_facts", [])
-            )
-        },
-    }
+        })
+    # Include facts established by Reviewer from previous tool results.
+    facts.update({
+        f"f{i+1}": fact
+        for i, fact in enumerate(
+            evidence_review.get("established_facts", [])
+        )
+    })
+
 
     # Fix each round's fact IDs in the generation schema.
     plan_schema = InvestigationPlan.model_json_schema()
