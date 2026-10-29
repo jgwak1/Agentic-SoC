@@ -216,8 +216,8 @@ def planner(state: InvestigationState):
                 #   + json.dumps(
                 #         {f"q{i+1}": q for i, q in enumerate(questions)},
                 #         indent=2,
-                #   + "\n\nTracked questions:\n"
-                #   + json.dumps(questions_sent, indent=2)
+                  + "\n\nTracked questions:\n"
+                  + json.dumps(questions_sent, indent=2)
 
                   # Provide these as reference, for planning
                   + "\n\nCompleted questions (reference only; do not investigate again):\n"
@@ -349,7 +349,7 @@ def planner(state: InvestigationState):
                  new_questions.extend(assessment.follow_up_questions)
 
             # Collect new questions proposed to address evidence gaps.
-            for assignment in plan.gap_assingments.values():
+            for assignment in plan.gap_assignments.values():
                  if assignment.new_question:
                       new_questions.append( assignment.new_question )
 
@@ -377,7 +377,7 @@ def planner(state: InvestigationState):
                 else:
                      question_id = None
                      for qid, question_text in updated_active.items():
-                          if question_text == assignment.new_question_strip():
+                          if question_text == assignment.new_question.strip():
                                question_id = qid
                                break
                           
@@ -405,14 +405,14 @@ def planner(state: InvestigationState):
                 
                 plan_data["current_question_id"] = selected_id
 
-                # Move accepted blocked questions from active to blocked records.
-                updated_blocked = state["blocked_questions"].copy()
+            # Move accepted blocked questions from active to blocked records.
+            updated_blocked = state["blocked_questions"].copy()
 
-                for qid, reason in blocked_requests.items():
-                     updated_blocked[qid] = {
-                          "question": updated_active.pop(qid),
-                          "reason": reason.strip(),
-                     }
+            for qid, reason in blocked_requests.items():
+                    updated_blocked[qid] = {
+                        "question": updated_active.pop(qid),
+                        "reason": reason.strip(),
+                    }
             
 
             print("[Planner] Plan:")
@@ -522,17 +522,17 @@ def reviewer( state: InvestigationState):
                 if review.current_question_resolved:
                     # Move the answered question from active to completed, 
                     # preserving its answer and supporting evidence.
-                    updated_completed["current_id"] = {
+                    updated_completed[current_qid] = {
                          "question": updated_active.pop(current_qid),
                          "answer": review.current_question_answer,
                          "evidence": review.current_question_evidence
                     }
-                    return {
-                         "evidence_review" : review.model_dump(),
-                         "active_questions": updated_active,
-                         "completed_questions": updated_completed,
-                         "next_question_number": updated_next_num
-                    }
+                return {
+                        "evidence_review" : review.model_dump(),
+                        "active_questions": updated_active,
+                        "completed_questions": updated_completed,
+                        "next_question_number": updated_next_num
+                }
 
 
 

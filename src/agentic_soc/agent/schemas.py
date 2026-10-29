@@ -85,7 +85,7 @@ class InvestigationPlan(BaseModel):
           )
       )      
 
-      gap_assignements: dict[str, GapAssignment] = Field(
+      gap_assignments: dict[str, GapAssignment] = Field(
            default_factory = dict,
            description = (
                 "For each supplied evidence Gap ID, either link it to an "
