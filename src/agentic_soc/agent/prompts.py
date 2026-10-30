@@ -38,108 +38,167 @@ Prompt Design Guidelines
 # """
 
 
+# PLANNER_PROMPT = """
+# Plan the next step of the security investigation using only the available evidence.
+
+# Actively examine and leverage all accumulated evidence, including established
+# facts, entities, relationships, and new findings.
+
+# Consider alternative hypotheses and investigation directions rather than
+# remaining committed to the current question.
+
+# Plan one focused, actionable investigation step at a time.
+
+# Choose one unresolved question that offers high information value
+# and can be meaningfully investigated using an available tool.
+
+# Describe:
+# - the question to investigate,
+# - what evidence is missing,
+# - what investigation action should be taken,
+# - which available tool should be used.
+
+# Describe the intended action in plain language. Do not generate tool arguments.
+
+# If an investigation direction cannot be pursued with the available tools,
+# reassess other unresolved questions and alternative investigation paths.
+
+# Before stopping, evaluate whether any remaining question can be
+# meaningfully investigated using the available tools.
+
+# The inability to resolve one question does not justify terminating
+# the entire investigation.
+
+# Set should_stop to true only when:
+# - the available evidence is sufficient for a final verdict, or
+# - no available tool can meaningfully investigate any remaining question.
+
+# When stopping because no useful investigation remains, identify the plausible alternative directions considered. 
+# Explain why each is already resolved or cannot be investigated with the available tools. 
+# An inability to answer the current question is insufficient justification.
+
+# If should_stop is false, all four planning fields must be provided:
+# current_question, evidence_needed, action_intent, and tool_name.
+
+# If should_stop is true, stop_reason must be provided.
+# The other planning fields may be null.
+
+# Treat rule_investigation_guide as reference guidance, not as observed evidence.
+
+# Evidence gap handling:
+# - For EVERY ID in "Evidence gaps to assign", return an entry in gap_assignments.
+# - Either link the gap to an existing active question using existing_question_id,
+#   or propose a new investigation question using new_question.
+# - For each gap, fill exactly one of existing_question_id or new_question, and set the other to null.
+# - Use only question IDs supplied under "Tracked questions".
+# - If no evidence gaps are supplied, return an empty dictionary.
+
+# For individual questions that cannot be meaningfully investigated further:
+# - Report their existing question IDs and reasons in questions_to_block.
+# - Use only IDs provided under "Tracked questions".
+# - Do not mark a question blocked merely because one query failed;
+#   consider whether another useful investigation approach exists.
+# - Do not select a question being blocked as current_question.
+# - Use an empty dictionary if no questions should be blocked.
+
+# Individual questions can be blocked even when should_stop is false
+# and the overall investigation continues.
+
+# When should_stop is true:
+# - Set stop_basis to "sufficient_evidence" or "no_actionable_path".
+# - In question_assessments, use every tracked question ID as a key.
+# - For each question, provide a status and an evidence-grounded reason:
+#   - resolved: available evidence answers the question.
+#   - blocked: available tools cannot meaningfully investigate it.
+#   - investigable: an available tool can gather useful missing evidence.
+#   - not_needed: answering it is unnecessary for the supported final verdict.
+# - An unsuccessful query alone does not establish that a question is blocked.
+# - With "no_actionable_path", every question must be resolved or blocked.
+# - Use "not_needed" only with "sufficient_evidence", explaining why the
+#   unanswered question is unnecessary for the final verdict.
+
+#   Before selecting the next question or deciding to stop, assess EVERY
+# entry in "Facts to assess", using its exact ID in fact_assessments.
+
+# For each fact:
+# - Examine its entities, identifiers, relationships, and implications.
+# - Generate unanswered follow-up questions arising from that fact,
+#   including questions arising from its relationship with other facts.
+# - If no additional question is needed, return an empty list and explain why.
+# - Do not omit a fact because it is unrelated to the current question.
+
+# Also consider additional hypotheses suggested by rule guidance and
+# security knowledge. Questions are not restricted to the supplied facts.
+
+# After this assessment, if should_stop is false, select one actionable investigation question.
+# Reuse an existing tracked question's exact wording when selecting it.
+
+# Question selection:
+# - "Tracked questions" contains active questions available for investigation.
+# - Select an active question, or propose a genuinely new question if needed.
+# - "Completed questions" contains previously answered questions and evidence.
+#   Use them as reference, but do not investigate or regenerate those questions.
+# - "Blocked questions" contains questions that cannot currently be investigated.
+#   Use them as reference, but do not select or regenerate those questions.
+
+# Alert:
+# {context}
+
+# Latest evidence review:
+# {evidence_review}
+
+# Available tools:
+# {available_tools}
+# """
+
 PLANNER_PROMPT = """
-Plan the next step of the security investigation using only the available evidence.
+Plan one useful next step in the security investigation using the available evidence and tools.
+Consider alternative hypotheses and all established findings. Treat
+rule_investigation_guide as guidance, not observed evidence.
 
-Actively examine and leverage all accumulated evidence, including established
-facts, entities, relationships, and new findings.
+Before deciding should_stop, assess the supplied facts and evidence gaps
+and evaluate whether any active question can still be investigated
+using the available tools.
 
-Consider alternative hypotheses and investigation directions rather than
-remaining committed to the current question.
+If should_stop is false (continue investigating):
+- Select one high-value question from "Tracked questions" (active questions),
+  reusing its exact wording, or propose a genuinely new question.
+- Provide NON-EMPTY current_question, evidence_needed, action_intent, and tool_name.
+- Describe the intended tool search in plain language; do not generate tool arguments.
+- Set stop_reason and stop_basis to null and question_assessments to {{}}.
 
-Plan one focused, actionable investigation step at a time.
+If should_stop is true (end the investigation):
+- Stop only when evidence supports a final verdict (stop_basis="sufficient_evidence")
+  or no available tool can usefully investigate remaining questions
+  (stop_basis="no_actionable_path"). One unsuccessful search is not enough.
+- Provide stop_reason, including why alternative investigation paths are unnecessary
+  or cannot be pursued. The four planning fields may be null.
+- In question_assessments, report the status and evidence-grounded reason for
+  EVERY ID in "Tracked questions": resolved (answered), blocked (no useful
+  tool-based path), investigable (useful next search exists), or not_needed
+  (unnecessary for a supported verdict).
+- For no_actionable_path, statuses must all be resolved or blocked.
+  Use not_needed only with sufficient_evidence.
 
-Choose one unresolved question that offers high information value
-and can be meaningfully investigated using an available tool.
+Question records:
+- "Tracked questions": active questions available to investigate.
+- "Completed questions" and "Blocked questions": reference only; do not select
+  or regenerate them.
+- In questions_to_block, list existing active question IDs and reasons if
+  they cannot be investigated further; otherwise use {{}}. This is allowed even
+  when should_stop is false. Never block a question based only on one failed query,
+  and do not select a question being blocked as current_question.
 
-Describe:
-- the question to investigate,
-- what evidence is missing,
-- what investigation action should be taken,
-- which available tool should be used.
+Fact assessments:
+- For EVERY ID in "Facts to assess", return fact_assessments with a reason
+  and follow_up_questions (an empty list if none are needed).
+- Examine identifiers, relationships, and cross-fact implications. Also consider
+  relevant hypotheses from security knowledge and the rule guide.
 
-Describe the intended action in plain language. Do not generate tool arguments.
-
-If an investigation direction cannot be pursued with the available tools,
-reassess other unresolved questions and alternative investigation paths.
-
-Before stopping, evaluate whether any remaining question can be
-meaningfully investigated using the available tools.
-
-The inability to resolve one question does not justify terminating
-the entire investigation.
-
-Set should_stop to true only when:
-- the available evidence is sufficient for a final verdict, or
-- no available tool can meaningfully investigate any remaining question.
-
-When stopping because no useful investigation remains, identify the plausible alternative directions considered. 
-Explain why each is already resolved or cannot be investigated with the available tools. 
-An inability to answer the current question is insufficient justification.
-
-If should_stop is false, all four planning fields must be provided:
-current_question, evidence_needed, action_intent, and tool_name.
-
-If should_stop is true, stop_reason must be provided.
-The other planning fields may be null.
-
-Treat rule_investigation_guide as reference guidance, not as observed evidence.
-
-Evidence gap handling:
-- For EVERY ID in "Evidence gaps to assign", return an entry in gap_assignments.
-- Either link the gap to an existing active question using existing_question_id,
-  or propose a new investigation question using new_question.
-- For each gap, fill exactly one of existing_question_id or new_question, and set the other to null.
-- Use only question IDs supplied under "Tracked questions".
-- If no evidence gaps are supplied, return an empty dictionary.
-
-For individual questions that cannot be meaningfully investigated further:
-- Report their existing question IDs and reasons in questions_to_block.
-- Use only IDs provided under "Tracked questions".
-- Do not mark a question blocked merely because one query failed;
-  consider whether another useful investigation approach exists.
-- Do not select a question being blocked as current_question.
-- Use an empty dictionary if no questions should be blocked.
-
-Individual questions can be blocked even when should_stop is false
-and the overall investigation continues.
-
-When should_stop is true:
-- Set stop_basis to "sufficient_evidence" or "no_actionable_path".
-- In question_assessments, use every tracked question ID as a key.
-- For each question, provide a status and an evidence-grounded reason:
-  - resolved: available evidence answers the question.
-  - blocked: available tools cannot meaningfully investigate it.
-  - investigable: an available tool can gather useful missing evidence.
-  - not_needed: answering it is unnecessary for the supported final verdict.
-- An unsuccessful query alone does not establish that a question is blocked.
-- With "no_actionable_path", every question must be resolved or blocked.
-- Use "not_needed" only with "sufficient_evidence", explaining why the
-  unanswered question is unnecessary for the final verdict.
-
-  Before selecting the next question or deciding to stop, assess EVERY
-entry in "Facts to assess", using its exact ID in fact_assessments.
-
-For each fact:
-- Examine its entities, identifiers, relationships, and implications.
-- Generate unanswered follow-up questions arising from that fact,
-  including questions arising from its relationship with other facts.
-- If no additional question is needed, return an empty list and explain why.
-- Do not omit a fact because it is unrelated to the current question.
-
-Also consider additional hypotheses suggested by rule guidance and
-security knowledge. Questions are not restricted to the supplied facts.
-
-After this assessment, if should_stop is false, select one actionable investigation question.
-Reuse an existing tracked question's exact wording when selecting it.
-
-Question selection:
-- "Tracked questions" contains active questions available for investigation.
-- Select an active question, or propose a genuinely new question if needed.
-- "Completed questions" contains previously answered questions and evidence.
-  Use them as reference, but do not investigate or regenerate those questions.
-- "Blocked questions" contains questions that cannot currently be investigated.
-  Use them as reference, but do not select or regenerate those questions.
+Evidence gaps:
+- For EVERY ID in "Evidence gaps to assign", return gap_assignments:
+  either existing_question_id from "Tracked questions" OR new_question.
+  Set the unused field to null. If no gaps are supplied, return {{}}.
 
 Alert:
 {context}

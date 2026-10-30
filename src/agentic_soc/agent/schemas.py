@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field, model_validator
+from pprint import pprint
 
 from typing import Literal
 
@@ -19,12 +20,18 @@ class GapAssignment(BaseModel):
           # Each evidence-gap must link to an existing question OR propose a new question
           # Invalid: Planner selected both options
           if self.existing_question_id and self.new_question:
-               raise ValueError("Choose only one option.")
+               pprint({ "existing_question_id": self.existing_question_id,
+                        "new_question": self.new_question })
+               raise ValueError("Both existing_question_id and new_question were provided. Choose one and set the other to null.")
           if not self.existing_question_id and not self.new_question:
-               raise ValueError("Choose only one option.")
+               pprint({ "existing_question_id": self.existing_question_id,
+                        "new_question": self.new_question })
+               raise ValueError("Neither existing_question_id nor new_question was provided. Supply an existing question ID or a new question.")
+
           return self
 
 class InvestigationPlan(BaseModel):
+      should_stop: bool
 
       current_question : str | None = Field(
          default = None,
@@ -46,7 +53,6 @@ class InvestigationPlan(BaseModel):
          description = "The tool intended to gather the evidence."
       )
 
-      should_stop: bool
 
       stop_reason: str | None = Field(
           description=(
@@ -86,7 +92,7 @@ class InvestigationPlan(BaseModel):
       )      
 
       gap_assignments: dict[str, GapAssignment] = Field(
-           default_factory = dict,
+          #  default_factory = dict,
            description = (
                 "For each supplied evidence Gap ID, either link it to an "
                 "existing active question ID or propose a new question."
@@ -100,13 +106,32 @@ class InvestigationPlan(BaseModel):
             if self.should_stop and not self.stop_reason:
                   raise ValueError("Stopping requires a reason.")
 
-            if not self.should_stop and not all([
-                  self.current_question,
-                  self.evidence_needed,
-                  self.action_intent,
-                  self.tool_name,
-            ]):
-                  raise ValueError("Continuing requires a complete plan.")
+          #   if not self.should_stop and not all([
+          #         self.current_question,
+          #         self.evidence_needed,
+          #         self.action_intent,
+          #         self.tool_name,
+          #   ]):
+
+            if not self.should_stop:
+               required_fields = [
+                 "current_question",
+                 "evidence_needed",
+                 "action_intent",
+                 "tool_name",
+               ]
+                  
+               #    raise ValueError("Continuing requires a complete plan.")
+
+               missing = [
+                    field for field in required_fields
+                    if not getattr(self, field)
+                  ]
+
+               if missing:
+                      raise ValueError(
+                         f"Continuing plan is missing: {missing}"
+                         )
 
             if self.should_stop and self.stop_basis is None:
                  raise ValueError("Stopping requires a stop_basis.")

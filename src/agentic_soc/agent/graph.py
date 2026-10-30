@@ -3,6 +3,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.prebuilt import ToolNode
 from langchain_core.exceptions import OutputParserException
 from pydantic import ValidationError
+from pprint import pprint
 
 MAX_PLAN_ATTEMPTS = 3
 MAX_REVIEW_ATTEMPTS = 3
@@ -18,7 +19,14 @@ from agentic_soc.tools.elastic_search import search_cloudtrail
 import json
 
 tools = [search_cloudtrail]
-available_tools = "\n".join([f"- {t.name}: {t.description}" for t in tools])
+# available_tools = "\n".join([f"- {t.name}: {t.description}" for t in tools])
+
+available_tools = "\n\n".join(
+    f"Tool: {t.name}\n"
+    f"Description: {t.description}\n"
+    f"Parameters: {json.dumps(t.args_schema.model_json_schema(), indent=2)}"
+    for t in tools
+)
 
 # print(search_cloudtrail.args_schema.model_json_schema())
 # print(
@@ -155,6 +163,10 @@ def planner(state: InvestigationState):
         )
     })
 
+    # Assign an ID (g1, g2, ...) to each evidence gap reported by Reviewer
+    gaps_sent = {
+         f"g{i+1}" : gap for i, gap in enumerate(evidence_review.get("evidence_gaps", []))
+    }
 
     # Fix each round's fact IDs in the generation schema.
     plan_schema = InvestigationPlan.model_json_schema()
@@ -165,6 +177,16 @@ def planner(state: InvestigationState):
         required=list(facts),
         additionalProperties=False,
     )
+
+    gap_schema = plan_schema["properties"]["gap_assignments"]
+    gap_type = gap_schema["additionalProperties"]
+
+    gap_schema.update(
+     properties={gap_id: gap_type for gap_id in gaps_sent},
+     required=list(gaps_sent),
+     additionalProperties=False,
+     )
+
     round_planner_llm = base_llm.with_structured_output(
         plan_schema, method="json_schema"
     )
@@ -180,10 +202,7 @@ def planner(state: InvestigationState):
         available_tools=available_tools,
     )
 
-    # Assign an ID (g1, g2, ...) to each evidence gap reported by Reviewer
-    gaps_sent = {
-         f"g{i+1}" : gap for i, gap in enumerate(evidence_review.get("evidence_gaps", []))
-    }
+
     # Send these gap-IDs and their corresponding evidence-gaps to the Planner
     prompt += "\n\nEvidence gaps to assign:\n" + json.dumps(gaps_sent, indent=2)
 
@@ -203,6 +222,17 @@ def planner(state: InvestigationState):
     #          When plan.should_stop=False, Python skips this question-status check).
     # (Later, we could use separate LLM calls for question assessment and generation.) 
     questions_sent = state["active_questions"].copy()
+
+
+    for label, records in (
+          ("FACTS", facts),
+          ("EVIDENCE GAPS", gaps_sent),
+          ("ACTIVE QUESTIONS", questions_sent),
+          ("COMPLETED QUESTIONS", state["completed_questions"]),
+          ("BLOCKED QUESTIONS", state["blocked_questions"]),
+     ):
+          print(f"\n[Planner input: {label}]")
+          pprint(records, width=100, sort_dicts=False)
 
     for attempt in range(MAX_PLAN_ATTEMPTS):
         try:
@@ -415,8 +445,12 @@ def planner(state: InvestigationState):
                     }
             
 
-            print("[Planner] Plan:")
-            print(plan_data)
+          #   print("[Planner] Plan:")
+          #   print(plan_data)
+
+            print("\n[Planner] Plan:")
+            pprint(plan_data, width=100, sort_dicts=False)
+
 
             return {
                 # "plan": plan.model_dump(),
@@ -458,7 +492,9 @@ def executor( state: InvestigationState):
       print("\n[Executor]")
       print("content:", response.content)
       print("reasoning:", response.additional_kwargs.get("reasoning_content"))
-      print("tool_calls:", response.tool_calls)
+     #  print("tool_calls:", response.tool_calls)
+      print("tool_calls:")
+      pprint(response.tool_calls, width=100, sort_dicts=False)
 
       if len(response.tool_calls) != 1:
          raise RuntimeError("Executor must produce exactly one tool call.")
@@ -478,6 +514,17 @@ def reviewer( state: InvestigationState):
       tool_call = state["messages"][-2].tool_calls[0] # latest tool call
       tool_result = state["messages"][-1].content # latest tool result
 
+      # Debug
+      print("\n[Actual tool call]")
+      pprint(tool_call, width=100, sort_dicts=False)
+      print("\n[Actual tool results]")
+      try:
+          tool_data = json.loads(tool_result)
+      except json.JSONDecodeError:
+          tool_data = tool_result
+      pprint(tool_data, width=100, sort_dicts=False)
+
+
       prompt = REVIEWER_PROMPT.format(
                         context = json.dumps( context, indent = 2),
                         plan = json.dumps( plan, indent = 2),
@@ -491,7 +538,8 @@ def reviewer( state: InvestigationState):
                 review = reviewer_llm.invoke([
                           HumanMessage(prompt)
                 ])
-                print(f"[Reviewer] Evidence review: {review.model_dump()}")
+                print("[Reviewer] Evidence review:")
+                pprint(review.model_dump(), width=100, sort_dicts=False)
 
             #     return {"evidence_review": review.model_dump()}
 
